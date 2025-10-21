@@ -9,6 +9,7 @@
     android:background="#FFFFFF"
     tools:context=".EditProfileActivity">
 
+
     <ProgressBar
         android:id="@+id/progressBarEdit"
         style="?android:attr/progressBarStyleLarge"
