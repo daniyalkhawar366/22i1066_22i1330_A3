@@ -12,7 +12,7 @@ class bilalCallActivity : AppCompatActivity() {
         setContentView(R.layout.bilalcall)
         endbtn = findViewById(R.id.endCallButton)
         endbtn.setOnClickListener {
-            val intent = Intent(this, bilalChatActivity::class.java)
+            val intent = Intent(this, ChatDetailActivity::class.java)
             startActivity(intent)
             finish()
         }

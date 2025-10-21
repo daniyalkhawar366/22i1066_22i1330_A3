@@ -23,11 +23,7 @@ class IbbiProfileActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.ibbiprofile)
         ibbichat = findViewById(R.id.ibbichat)
-        ibbichat.setOnClickListener {
-            val intent = Intent(this, ibbiChatActivity::class.java)
-            startActivity(intent)
-            finish()
-        }
+
         ibbiHighlight1 = findViewById(R.id.kashmir)
         ibbiHighlight1.setOnClickListener {
             val intent = Intent(this, ibbiHighlights1Activity::class.java)

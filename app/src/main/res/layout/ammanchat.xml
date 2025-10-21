@@ -9,7 +9,7 @@
     android:background="#FFFFFF"
     tools:context=".personalChatActivity">
 
-
+    <!-- Bottom indicator -->
     <ImageView
         android:id="@+id/indicator"
         android:layout_width="wrap_content"
@@ -20,8 +20,6 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- Header -->
 
     <!-- Header -->
     <ImageView
@@ -85,82 +83,18 @@
         app:layout_constraintTop_toTopOf="@id/profileImage"
         app:layout_constraintBottom_toBottomOf="@id/profileImage" />
 
-
-    <!-- New Chat Content -->
-
-    <!-- Time text -->
-
-    <!-- Chat bubble -->
-    <!-- Time text -->
-    <TextView
-        android:id="@+id/chatTime"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="224dp"
-        android:text="11:49 AM"
-        android:textColor="#000000"
-        android:textSize="14sp"
-        app:layout_constraintEnd_toEndOf="parent"
+    <!-- RecyclerView for dynamic messages -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        app:layout_constraintTop_toBottomOf="@id/profileImage"
+        app:layout_constraintBottom_toTopOf="@id/messageBar"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/profileImage" />
-
-    <!-- Your first message -->
-    <TextView
-        android:id="@+id/chatBubble1"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:padding="12dp"
-        android:text="Hello"
-        android:textSize="14sp"
-        android:textColor="#FFFFFF"
-        android:background="@drawable/chat_bubble_bg"
-        android:layout_marginTop="16dp"
-        app:layout_constraintTop_toBottomOf="@id/chatTime"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- His reply -->
-    <TextView
-        android:id="@+id/chatBubble2"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:padding="12dp"
-        android:text="G Dani bhai"
-        android:textSize="14sp"
-        android:textColor="#000000"
-        android:background="@drawable/chat_bubble_received_bg"
-        android:layout_marginTop="12dp"
-        app:layout_constraintTop_toBottomOf="@id/chatBubble1"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <!-- Your next message -->
-    <TextView
-        android:id="@+id/chatBubble3"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:padding="12dp"
-        android:text="Amman bhai internship nai lagi yaar :( "
-        android:textSize="14sp"
-        android:textColor="#FFFFFF"
-        android:background="@drawable/chat_bubble_bg"
-        android:layout_marginTop="12dp"
-        app:layout_constraintTop_toBottomOf="@id/chatBubble2"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- His last message -->
-    <TextView
-        android:id="@+id/chatBubble4"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:padding="12dp"
-        android:text="Dani bhai aapko referral dedun Systems mei?"
-        android:textSize="14sp"
-        android:textColor="#000000"
-        android:background="@drawable/chat_bubble_received_bg"
-        android:layout_marginTop="12dp"
-        app:layout_constraintTop_toBottomOf="@id/chatBubble3"
-        app:layout_constraintStart_toStartOf="parent" />
-
-
+        app:layout_constraintEnd_toEndOf="parent"
+        tools:listitem="@layout/item_message_sent" />
 
     <!-- Bottom message input bar -->
     <LinearLayout
@@ -197,6 +131,14 @@
             android:padding="8dp"/>
 
         <ImageView
+            android:id="@+id/sendButton"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/send"
+            android:tint="#8B5A5A"
+            android:layout_marginStart="8dp" />
+
+        <ImageView
             android:id="@+id/micIcon"
             android:layout_width="24dp"
             android:layout_height="24dp"
@@ -220,5 +162,6 @@
             android:tint="#000000"
             android:layout_marginStart="4dp"/>
     </LinearLayout>
+
 
 </androidx.constraintlayout.widget.ConstraintLayout>

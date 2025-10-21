@@ -1,8 +1,16 @@
+import org.gradle.kotlin.dsl.invoke
+import kotlin.plus
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
+    id("com.google.gms.google-services")
+    id("org.jetbrains.kotlin.plugin.compose") version "2.0.21"
+    id("org.jetbrains.kotlin.kapt")
+
 }
+
+
 
 android {
     namespace = "com.example.a22i1066_b_socially"
@@ -38,10 +46,36 @@ android {
     buildFeatures {
         compose = true
     }
+// kotlin (one-line reference, add inside android { })
+    packaging { resources { excludes += setOf("META-INF/DEPENDENCIES") } }
+
 }
 
 dependencies {
 
+    implementation(platform("com.google.firebase:firebase-bom:34.4.0"))
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-auth:22.3.0")
+    implementation("com.google.firebase:firebase-firestore:25.0.0")
+    implementation("com.google.firebase:firebase-storage-ktx:20.3.0")
+    implementation("com.google.firebase:firebase-database-ktx:21.0.0")
+    implementation("com.github.bumptech.glide:glide:4.16.0")
+    implementation("com.google.firebase:firebase-storage")
+    implementation("com.github.bumptech.glide:glide:4.15.1")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okio:okio:3.5.0")
+    implementation("com.google.firebase:firebase-messaging:23.2.0")
+    implementation("io.agora.rtc:full-sdk:4.2.2")
+    implementation("androidx.camera:camera-core:1.2.3")
+    implementation("androidx.camera:camera-camera2:1.2.3")
+    implementation("androidx.camera:camera-lifecycle:1.2.3")
+    implementation("androidx.camera:camera-view:1.2.3")
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+    implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.google.auth:google-auth-library-oauth2-http:1.19.0")
+
+
+    kapt("com.github.bumptech.glide:compiler:4.16.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)

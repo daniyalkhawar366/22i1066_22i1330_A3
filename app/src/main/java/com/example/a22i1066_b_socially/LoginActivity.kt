@@ -7,16 +7,20 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.Toast
+import com.google.firebase.auth.FirebaseAuth
 
 class LoginActivity : AppCompatActivity() {
     private lateinit var ivBackArrow: ImageView
     private lateinit var btnLogin: Button
-    private lateinit var etUsername: EditText
+    private lateinit var etEmail: EditText
     private lateinit var etPassword: EditText
+    private lateinit var auth: FirebaseAuth
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.login)
+
+        auth = FirebaseAuth.getInstance()
 
         ivBackArrow = findViewById(R.id.ivbackArrow)
         val signupButton = findViewById<Button>(R.id.signup_button)
@@ -31,31 +35,35 @@ class LoginActivity : AppCompatActivity() {
             finish()
         }
 
-        // Initialize input fields
-        etUsername = findViewById(R.id.etUsername)     // Make sure IDs match your login.xml
+        etEmail = findViewById(R.id.etEmail)
         etPassword = findViewById(R.id.etPassword)
-
-        // Initialize the login button
         btnLogin = findViewById(R.id.btnLogin)
 
         btnLogin.setOnClickListener {
-            val email = etUsername.text.toString().trim()
+            val email = etEmail.text.toString().trim()
             val password = etPassword.text.toString().trim()
 
             if (email.isEmpty()) {
-                etUsername.error = "Email required"
+                etEmail.error = "Email required"
                 return@setOnClickListener
             }
-
             if (password.isEmpty()) {
                 etPassword.error = "Password required"
                 return@setOnClickListener
             }
 
-            val intent = Intent(this, FYPActivity::class.java)
-            startActivity(intent)
-            Toast.makeText(this, "Login Successful", Toast.LENGTH_SHORT).show()
-            finish()
+            auth.signInWithEmailAndPassword(email, password)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        uploadPendingTokenIfNeeded(this)
+                        startActivity(Intent(this, FYPActivity::class.java))
+                        Toast.makeText(this, "Login Successful", Toast.LENGTH_SHORT).show()
+                        finish()
+                    } else {
+                        Toast.makeText(this, "Login Failed: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
         }
     }
 }
+

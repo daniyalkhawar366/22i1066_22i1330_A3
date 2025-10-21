@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="60dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="16dp"
+    android:background="?android:attr/selectableItemBackground">
+
+    <!-- Profile image with online indicator overlay -->
+    <FrameLayout
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginEnd="12dp">
+
+        <ImageView
+            android:id="@+id/chatProfileImage"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:src="@drawable/amman"
+            android:background="@drawable/circle_mask"
+            android:clipToOutline="true"
+            android:scaleType="centerCrop"/>
+
+        <View
+            android:id="@+id/onlineIndicator"
+            android:layout_width="10dp"
+            android:layout_height="10dp"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="0dp"
+            android:visibility="gone"
+            android:background="@drawable/online_dot"/>
+    </FrameLayout>
+
+    <!-- Username + last message vertical stack -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/chatUsername"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Username"
+            android:textSize="16sp"
+            android:textColor="#000000"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/lastMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Last message preview goes here"
+            android:textSize="14sp"
+            android:textColor="#777777"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:layout_marginTop="2dp"/>
+    </LinearLayout>
+
+    <!-- Timestamp placed slightly left of camera icon -->
+    <TextView
+        android:id="@+id/lastTimestamp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="12:34"
+        android:textSize="12sp"
+        android:textColor="#777777"
+        android:layout_marginEnd="8dp" />
+
+    <!-- Camera icon on the far right -->
+    <ImageView
+        android:id="@+id/cameraIcon"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:src="@drawable/camera"
+        android:tint="#8B5A5A" />
+</LinearLayout>

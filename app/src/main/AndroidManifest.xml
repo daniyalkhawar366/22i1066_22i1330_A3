@@ -3,6 +3,19 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.example.a22i1066_b_socially">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+
+
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -13,17 +26,34 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
     tools:targetApi="31">
+        <activity android:name=".ProfileImageUploaderActivity" />
 
-    <activity
-        android:name=".MainActivity"
-        android:exported="true"
-        android:label="@string/app_name"
-        android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
-        <intent-filter>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.LAUNCHER" />
-        </intent-filter>
-    </activity>
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+            <!-- Remove intent-filter from here -->
+        </activity>
+        <activity
+            android:name=".SplashActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <service
+            android:name=".MyFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+
+
+
 
         <activity
             android:name=".SignupActivity"
@@ -66,6 +96,8 @@
             android:exported="false"
             android:label="MakePost"
             android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+
+        <activity android:name=".AddPostDetailsActivity" android:exported="false" />
         <activity
             android:name=".NotificationsFollowingActivity"
             android:exported="false"
@@ -110,36 +142,6 @@
             android:name=".SearchBarActivity"
             android:exported="false"
             android:label="Search Bar"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
-        <activity
-            android:name=".samChatActivity"
-            android:exported="false"
-            android:label="Samee's Chat"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
-        <activity
-            android:name=".ammanChatActivity"
-            android:exported="false"
-            android:label="Ammans Chat"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
-        <activity
-            android:name=".ibbiChatActivity"
-            android:exported="false"
-            android:label="Ibrahim's Chat"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
-        <activity
-            android:name=".jdChatActivity"
-            android:exported="false"
-            android:label="Umar's Chat"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
-        <activity
-            android:name=".rafayChatActivity"
-            android:exported="false"
-            android:label="Rafay's Chat"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
-        <activity
-            android:name=".bilalChatActivity"
-            android:exported="false"
-            android:label="Bilal's Chat"
             android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
         <activity
             android:name=".EditProfileActivity"
@@ -221,6 +223,33 @@
             android:exported="false"
             android:label="Upload Story"
             android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+        <activity android:name=".ChatDetailActivity" />
+
+        <activity android:name=".ProfileActivity" />
+
+        <activity android:name=".CallActivity" android:exported="false" />
+        <activity android:name=".VideoCallActivity" android:exported="false" />
+
+        <activity android:name=".PostDetailActivity" android:exported="false" />
+        <activity android:name=".AddHighlightActivity" android:exported="false" />
+        <activity android:name=".HighlightViewActivity" android:exported="false" />
+        <activity android:name=".OtherUserStoryActivity" android:exported="false" />
+        <activity
+            android:name=".ImageViewerActivity"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+        <activity
+            android:name=".FollowersFollowingActivity"
+            android:exported="false"/>
+        <activity
+            android:name=".CommentsActivity"
+            android:exported="false"/>
+        <activity
+            android:name=".SharePostActivity"
+            android:exported="false"/>
+
+
+
+
 
 
 

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="8dp">
+
+    <!-- Frame for ring + image + add icon -->
+    <FrameLayout
+        android:layout_width="70dp"
+        android:layout_height="70dp">
+
+        <!-- Ring background (gradient border) -->
+        <View
+            android:id="@+id/storyRing"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/ring_gradient"
+            android:visibility="gone"/>
+
+        <!-- Profile Image -->
+        <ImageView
+            android:id="@+id/storyImage"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:layout_gravity="center"
+            android:src="@drawable/profile_pic"
+            android:scaleType="centerCrop"
+            android:background="@drawable/circle_white_bg"
+            android:clipToOutline="true"/>
+
+        <!-- Add icon (bottom-right) -->
+        <ImageView
+            android:id="@+id/addStoryIcon"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="bottom|end"
+            android:src="@drawable/ic_add"
+            android:background="@drawable/add_icon_bg"
+            android:visibility="gone"
+            android:padding="4dp"/>
+    </FrameLayout>
+
+    <!-- Username Text -->
+    <TextView
+        android:id="@+id/storyUsername"
+        android:layout_width="70dp"
+        android:layout_height="wrap_content"
+        android:text="Username"
+        android:textSize="12sp"
+        android:textColor="#262626"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:layout_marginTop="4dp"
+        android:visibility="visible"/>
+</LinearLayout>

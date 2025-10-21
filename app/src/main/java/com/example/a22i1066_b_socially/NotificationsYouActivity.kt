@@ -49,12 +49,7 @@ class NotificationsYouActivity : AppCompatActivity() {
             startActivity(intent)
             finish()
         }
-        rafaychat = findViewById(R.id.rafaychat)
-        rafaychat.setOnClickListener {
-            val intent = Intent(this, rafayChatActivity::class.java)
-            startActivity(intent)
-            finish()
-        }
+
         ibbiprofile = findViewById(R.id.ibbiprofile)
         ibbiprofile.setOnClickListener {
             val intent = Intent(this, IbbiProfileActivity::class.java)

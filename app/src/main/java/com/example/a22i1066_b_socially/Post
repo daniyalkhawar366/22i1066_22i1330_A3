@@ -1,0 +1,8 @@
+package com.example.a22i1066_b_socially
+
+data class Story(
+    val storyId: String = "",
+    val userId: String = "",
+    val imageUrl: String = "",
+    val timestamp: Long = 0L
+)

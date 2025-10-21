@@ -51,7 +51,6 @@
                 android:src="@drawable/down"
                 android:tint="#8B5A5A"
                 android:layout_marginStart="4dp"/>
-
         </LinearLayout>
 
         <TextView
@@ -64,40 +63,32 @@
             android:textStyle="bold"
             android:background="?android:attr/selectableItemBackground"
             android:padding="8dp"/>
-
     </LinearLayout>
 
     <!-- Main Selected Photo -->
-
-    <!-- Photo Selection Controls -->
-    <!-- Main Selected Photo -->
-
-    <!-- Photo Selection Controls (overlay on bottom-right of photo) -->
     <ImageView
         android:id="@+id/mainSelectedPhoto"
-        android:layout_width="415dp"
-        android:layout_height="338dp"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         android:scaleType="centerCrop"
         android:src="@drawable/me2"
-        app:layout_constraintBottom_toTopOf="@id/photoGrid"
-        app:layout_constraintDimensionRatio="1:1"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="1.0"
-        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/topHeader"
-        app:layout_constraintVertical_bias="0.0" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintDimensionRatio="1:1"/>
 
+    <!-- Photo Selection Controls (overlay on bottom-right of photo) -->
     <LinearLayout
         android:id="@+id/photoControls"
         android:layout_width="wrap_content"
         android:layout_height="48dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingEnd="12dp"
         android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:layout_margin="12dp"
         app:layout_constraintBottom_toBottomOf="@id/mainSelectedPhoto"
-        app:layout_constraintEnd_toEndOf="@id/mainSelectedPhoto"
-        android:layout_margin="12dp">
+        app:layout_constraintEnd_toEndOf="@id/mainSelectedPhoto">
 
         <!-- Loop/Infinity Icon -->
         <ImageView
@@ -134,143 +125,15 @@
             android:fontFamily="sans-serif-medium"/>
     </LinearLayout>
 
-
-
-    <!-- Photo Grid -->
-    <LinearLayout
-        android:id="@+id/photoGrid"
+    <!-- Photo Grid RecyclerView -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/photoGridRecycler"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:orientation="vertical"
-        android:background="#FFFFFF"
+        android:background="#F5F5F5"
         app:layout_constraintTop_toBottomOf="@id/mainSelectedPhoto"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
-
-        <!-- Row 1 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:orientation="horizontal">
-
-            <ImageView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:src="@drawable/me1"
-                android:scaleType="centerCrop"
-                android:layout_margin="1dp"/>
-
-            <ImageView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:src="@drawable/profile_pic"
-                android:scaleType="centerCrop"
-                android:layout_margin="1dp"/>
-
-            <ImageView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:src="@drawable/mansion"
-                android:scaleType="centerCrop"
-                android:layout_margin="1dp"/>
-
-            <ImageView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:src="@drawable/landscape"
-                android:scaleType="centerCrop"
-                android:layout_margin="1dp"/>
-
-        </LinearLayout>
-
-        <!-- Row 2 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:orientation="horizontal">
-
-            <ImageView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:src="@drawable/flowers"
-                android:scaleType="centerCrop"
-                android:layout_margin="1dp"/>
-
-            <ImageView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:src="@drawable/cars"
-                android:scaleType="centerCrop"
-                android:layout_margin="1dp"/>
-
-            <ImageView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:src="@drawable/camping"
-                android:scaleType="centerCrop"
-                android:layout_margin="1dp"/>
-
-            <ImageView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:src="@drawable/uni"
-                android:scaleType="centerCrop"
-                android:layout_margin="1dp"/>
-
-        </LinearLayout>
-
-        <!-- Row 3 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:orientation="horizontal">
-
-            <ImageView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:src="@drawable/weddings"
-                android:scaleType="centerCrop"
-                android:layout_margin="1dp"/>
-
-            <ImageView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:src="@drawable/bar"
-                android:scaleType="centerCrop"
-                android:layout_margin="1dp"/>
-
-            <ImageView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:src="@drawable/bird"
-                android:scaleType="centerCrop"
-                android:layout_margin="1dp"/>
-
-            <ImageView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:src="@drawable/wedding3"
-                android:scaleType="centerCrop"
-                android:layout_margin="1dp"/>
-
-        </LinearLayout>
-
-    </LinearLayout>
+        app:layout_constraintBottom_toBottomOf="parent"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

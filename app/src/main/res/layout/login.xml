@@ -27,32 +27,32 @@
         android:id="@+id/tvSociallyTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="80dp"
+        android:layout_marginTop="60dp"
         android:fontFamily="sans-serif-light"
         android:text="Socially"
         android:textColor="#8B5A5A"
         android:textSize="36sp"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/ivbackArrow"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/backArrow" />
+        app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Username Input Field -->
+    <!-- Email Input Field -->
     <EditText
-        android:id="@+id/etUsername"
+        android:id="@+id/etEmail"
         android:layout_width="0dp"
         android:layout_height="50dp"
-        android:layout_marginTop="80dp"
-        android:hint="asad_khasanov"
+        android:layout_marginTop="60dp"
+        android:hint="Email"
         android:textColorHint="#999999"
         android:textColor="#333333"
         android:textSize="16sp"
         android:fontFamily="sans-serif"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
-        android:inputType="text"
-        app:layout_constraintEnd_toEndOf="parent"
+        android:inputType="textEmailAddress"
+        app:layout_constraintTop_toBottomOf="@id/tvSociallyTitle"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvSociallyTitle" />
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- Password Input Field -->
     <EditText
@@ -68,24 +68,24 @@
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
         android:inputType="textPassword"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/etEmail"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/etUsername" />
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- Forgot Password -->
     <TextView
         android:id="@+id/tvForgotPassword"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="8dp"
         android:text="Forgot password?"
         android:textColor="#C4A484"
         android:textSize="14sp"
         android:fontFamily="sans-serif"
-        android:background="?android:attr/selectableItemBackground"
         android:padding="8dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/etPassword" />
+        android:background="?android:attr/selectableItemBackground"
+        app:layout_constraintTop_toBottomOf="@id/etPassword"
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- Log in Button -->
     <Button
@@ -99,53 +99,53 @@
         android:text="Log in"
         android:textColor="#FFFFFF"
         android:textSize="16sp"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvForgotPassword"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvForgotPassword" />
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- OR Divider -->
     <TextView
         android:id="@+id/tvOr"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="40dp"
+        android:layout_marginTop="24dp"
         android:text="OR"
         android:textColor="#CCCCCC"
         android:textSize="14sp"
         android:fontFamily="sans-serif"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnLogin"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btnLogin" />
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- Sign up Row -->
     <LinearLayout
         android:id="@+id/signUpRow"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="80dp"
+        android:layout_marginTop="16dp"
         android:orientation="horizontal"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
+        app:layout_constraintTop_toBottomOf="@id/tvOr"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:fontFamily="sans-serif"
             android:text="Don't have an account? "
             android:textColor="#999999"
-            android:textSize="14sp" />
+            android:textSize="14sp"
+            android:fontFamily="sans-serif" />
 
         <Button
             android:id="@+id/signup_button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="?android:attr/selectableItemBackground"
-            android:fontFamily="sans-serif-medium"
-            android:padding="4dp"
             android:text="Sign up"
             android:textColor="#8B5A5A"
-            android:textSize="14sp" />
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium"
+            android:padding="4dp" />
     </LinearLayout>
 
     <!-- Footer -->
@@ -154,12 +154,11 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginBottom="24dp"
-        android:fontFamily="sans-serif-light"
         android:text="Socially"
         android:textColor="#8B5A5A"
         android:textSize="16sp"
+        android:fontFamily="sans-serif-light"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
-
 </androidx.constraintlayout.widget.ConstraintLayout>

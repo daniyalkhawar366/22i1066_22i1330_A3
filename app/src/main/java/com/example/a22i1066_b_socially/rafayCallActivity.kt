@@ -12,7 +12,7 @@ class rafayCallActivity : AppCompatActivity() {
         setContentView(R.layout.rafaycall)
         endbtn = findViewById(R.id.endCallButton)
         endbtn.setOnClickListener {
-            val intent = Intent(this, rafayChatActivity::class.java)
+            val intent = Intent(this, ChatDetailActivity::class.java)
             startActivity(intent)
             finish()
         }

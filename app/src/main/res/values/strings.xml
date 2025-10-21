@@ -7,4 +7,20 @@
     <string name="activity3"><b>Rfy_196</b> started following you. 5h</string>
     <string name="activity4"><b>Abd_Samee</b> commented under your post \"Very nice pics dear\". 2d</string>
     <string name="activity5"><b>Ibbi</b> started following you. 3d</string>
+    <string name="chats_title">Chats</string>
+    <string name="message_hint">Message...</string>
+    <string name="message_empty">Message cannot be empty</string>
+    <string name="user_info_missing">User info missing</string>
+    <string name="edit_message_title">Edit message</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete_confirmation">Delete this message?</string>
+    <string name="message_delete_failed">Failed to delete message</string>
+    <string name="message_update_failed">Failed to update message</string>
+    <string name="message_deleted">Message deleted</string>
+    <string name="message_updated">Message updated</string>
+    <string name="agora_app_id">caca39104a564ed5b5ee36350148f043</string>
+
 </resources>
+
+
