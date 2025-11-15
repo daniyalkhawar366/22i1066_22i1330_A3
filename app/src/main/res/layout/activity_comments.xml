@@ -39,13 +39,16 @@
             android:textStyle="bold"
             android:gravity="center"/>
 
-        <ImageView
+        <TextView
             android:id="@+id/postBtn"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/send"
-            app:tint="#8B5A5A"
-            android:background="?android:attr/selectableItemBackground"/>
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Post"
+            android:textSize="16sp"
+            android:textColor="#0095F6"
+            android:background="?attr/selectableItemBackground"
+            android:padding="12dp"/>
+
     </LinearLayout>
 
     <!-- Divider -->

@@ -80,22 +80,21 @@ class SharePostActivity : AppCompatActivity() {
                     return@addOnSuccessListener
                 }
 
-                // Query in batches if more than 10 users
-                val batches = followingIds.chunked(10)
                 users.clear()
+                var loaded = 0
 
-                var processedBatches = 0
-                batches.forEach { batch ->
-                    db.collection("users")
-                        .whereIn("id", batch)
+                followingIds.forEach { userId ->
+                    db.collection("users").document(userId)
                         .get()
-                        .addOnSuccessListener { usersSnapshot ->
-                            usersSnapshot.documents.forEach { doc ->
+                        .addOnSuccessListener { doc ->
+                            if (doc.exists()) {
                                 try {
                                     val user = User(
                                         id = doc.id,
                                         username = doc.getString("username") ?: "",
-                                        profilePicUrl = doc.getString("profilePicUrl") ?: ""
+                                        profilePicUrl = doc.getString("profilePicUrl") ?: "",
+                                        lastMessage = null,
+                                        lastTimestamp = null
                                     )
                                     users.add(user)
                                 } catch (e: Exception) {
@@ -103,22 +102,28 @@ class SharePostActivity : AppCompatActivity() {
                                 }
                             }
 
-                            processedBatches++
-                            if (processedBatches == batches.size) {
+                            loaded++
+                            if (loaded == followingIds.size) {
                                 adapter.notifyDataSetChanged()
                                 progressBar.visibility = View.GONE
                             }
                         }
                         .addOnFailureListener { e ->
-                            Log.e(TAG, "Error loading batch", e)
-                            processedBatches++
-                            if (processedBatches == batches.size) {
+                            Log.e(TAG, "Error loading user", e)
+                            loaded++
+                            if (loaded == followingIds.size) {
                                 progressBar.visibility = View.GONE
                             }
                         }
                 }
             }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Error loading following", e)
+                progressBar.visibility = View.GONE
+                Toast.makeText(this, "Failed to load users", Toast.LENGTH_SHORT).show()
+            }
     }
+
 
 
     private fun shareToUser(user: User) {

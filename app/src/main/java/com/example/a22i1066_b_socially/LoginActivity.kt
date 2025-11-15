@@ -7,37 +7,39 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.Toast
-import com.google.firebase.auth.FirebaseAuth
+import androidx.lifecycle.lifecycleScope
+import com.example.a22i1066_b_socially.network.LoginRequest
+import com.example.a22i1066_b_socially.network.RetrofitClient
+import kotlinx.coroutines.launch
+import kotlin.or
 
 class LoginActivity : AppCompatActivity() {
     private lateinit var ivBackArrow: ImageView
     private lateinit var btnLogin: Button
     private lateinit var etEmail: EditText
     private lateinit var etPassword: EditText
-    private lateinit var auth: FirebaseAuth
+    private lateinit var sessionManager: SessionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.login)
 
-        auth = FirebaseAuth.getInstance()
+        sessionManager = SessionManager(this)
 
         ivBackArrow = findViewById(R.id.ivbackArrow)
-        val signupButton = findViewById<Button>(R.id.signup_button)
-        signupButton.setOnClickListener {
-            val intent = Intent(this, SignupActivity::class.java)
-            startActivity(intent)
-        }
-
-        ivBackArrow.setOnClickListener {
-            val intent = Intent(this, MainActivity::class.java)
-            startActivity(intent)
-            finish()
-        }
-
         etEmail = findViewById(R.id.etEmail)
         etPassword = findViewById(R.id.etPassword)
         btnLogin = findViewById(R.id.btnLogin)
+
+        val signupButton = findViewById<Button>(R.id.signup_button)
+        signupButton.setOnClickListener {
+            startActivity(Intent(this, SignupActivity::class.java))
+        }
+
+        ivBackArrow.setOnClickListener {
+            startActivity(Intent(this, MainActivity::class.java))
+            finish()
+        }
 
         btnLogin.setOnClickListener {
             val email = etEmail.text.toString().trim()
@@ -52,18 +54,47 @@ class LoginActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            auth.signInWithEmailAndPassword(email, password)
-                .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        uploadPendingTokenIfNeeded(this)
-                        startActivity(Intent(this, FYPActivity::class.java))
-                        Toast.makeText(this, "Login Successful", Toast.LENGTH_SHORT).show()
-                        finish()
-                    } else {
-                        Toast.makeText(this, "Login Failed: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
-                    }
-                }
+            loginUser(email, password)
         }
     }
-}
 
+    private fun loginUser(email: String, password: String) {
+        btnLogin.isEnabled = false
+
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.login(LoginRequest(email, password))
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val token = response.body()?.token ?: ""
+                    val userId = response.body()?.userId ?: ""
+
+                    // Save session
+                    sessionManager.saveAuthToken(token, userId)
+
+                    runOnUiThread {
+                        Toast.makeText(this@LoginActivity, "Login Successful", Toast.LENGTH_SHORT).show()
+
+                        // Navigate to FYP
+                        val intent = Intent(this@LoginActivity, FYPActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        startActivity(intent)
+                        finish()
+                    }
+                } else {
+                    val error = response.body()?.error ?: "Login failed"
+                    runOnUiThread {
+                        Toast.makeText(this@LoginActivity, error, Toast.LENGTH_SHORT).show()
+                        btnLogin.isEnabled = true
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(this@LoginActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    btnLogin.isEnabled = true
+                }
+            }
+        }
+    }
+
+}

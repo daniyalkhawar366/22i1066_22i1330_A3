@@ -104,18 +104,20 @@
         app:layout_constraintTop_toTopOf="@id/likeBtn"/>
 
     <!-- Likes Count -->
+    <!-- Likes Count -->
     <TextView
         android:id="@+id/likes"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:text="0 likes"
+        android:textSize="14sp"
+        android:textColor="#262626"
+        android:textStyle="bold"
         android:layout_marginStart="12dp"
         android:layout_marginTop="8dp"
-        android:text="0 likes"
-        android:textColor="#262626"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/likeBtn"/>
+        app:layout_constraintTop_toBottomOf="@id/likeBtn"
+        app:layout_constraintStart_toStartOf="parent"/>
+
 
     <!-- Caption -->
     <TextView

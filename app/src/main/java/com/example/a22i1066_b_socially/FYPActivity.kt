@@ -23,6 +23,10 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.messaging.FirebaseMessaging
+import kotlin.dec
+import kotlin.inc
+import kotlin.text.get
+import kotlin.text.set
 
 class FYPActivity : AppCompatActivity() {
     private val TAG = "FYPActivity"
@@ -49,8 +53,15 @@ class FYPActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val uid = auth.currentUser?.uid
-        if (uid.isNullOrBlank()) {
+        val sessionManager = SessionManager(this)
+        if (!sessionManager.isLoggedIn()) {
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+            return
+        }
+        currentUserId = sessionManager.getUserId() ?: ""
+        if (currentUserId.isEmpty()) {
+            Toast.makeText(this, "Invalid session", Toast.LENGTH_SHORT).show()
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
             return
@@ -67,12 +78,6 @@ class FYPActivity : AppCompatActivity() {
             } else {
                 Log.w(TAG, "Token fetch failed", task.exception)
             }
-        }
-        currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
-        if (currentUserId.isEmpty()) {
-            Toast.makeText(this, "Not authenticated", Toast.LENGTH_SHORT).show()
-            finish()
-            return
         }
 
 
@@ -331,32 +336,60 @@ class FYPActivity : AppCompatActivity() {
         val postRef = firestore.collection("posts").document(post.id)
         val likeRef = postRef.collection("likes").document(currentUserId)
 
-        if (post.isLikedByCurrentUser) {
+        val index = posts.indexOfFirst { it.id == post.id }
+        if (index == -1) return
+
+        val wasLiked = post.isLikedByCurrentUser
+
+        if (wasLiked) {
             // Unlike
             likeRef.delete()
-            postRef.update("likesCount", FieldValue.increment(-1))
                 .addOnSuccessListener {
-                    val index = posts.indexOfFirst { it.id == post.id }
-                    if (index != -1) {
-                        posts[index].likesCount--
-                        posts[index].isLikedByCurrentUser = false
-                        adapter.notifyItemChanged(index)
-                    }
+                    postRef.update("likesCount", FieldValue.increment(-1))
+                        .addOnSuccessListener {
+                            // Reload the post to get accurate count
+                            reloadPost(post.id)
+                        }
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Failed to unlike", e)
+                    Toast.makeText(this, "Failed to unlike", Toast.LENGTH_SHORT).show()
                 }
         } else {
             // Like
             likeRef.set(mapOf("timestamp" to FieldValue.serverTimestamp()))
-            postRef.update("likesCount", FieldValue.increment(1))
                 .addOnSuccessListener {
-                    val index = posts.indexOfFirst { it.id == post.id }
-                    if (index != -1) {
-                        posts[index].likesCount++
-                        posts[index].isLikedByCurrentUser = true
-                        adapter.notifyItemChanged(index)
-                    }
+                    postRef.update("likesCount", FieldValue.increment(1))
+                        .addOnSuccessListener {
+                            // Reload the post to get accurate count
+                            reloadPost(post.id)
+                        }
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Failed to like", e)
+                    Toast.makeText(this, "Failed to like", Toast.LENGTH_SHORT).show()
                 }
         }
     }
+
+    private fun reloadPost(postId: String) {
+        firestore.collection("posts").document(postId)
+            .get()
+            .addOnSuccessListener { doc ->
+                val index = posts.indexOfFirst { it.id == postId }
+                if (index != -1 && doc.exists()) {
+                    val updatedLikesCount = doc.getLong("likesCount") ?: 0L
+
+                    checkIfLiked(postId) { isLiked ->
+                        posts[index].likesCount = updatedLikesCount
+                        posts[index].isLikedByCurrentUser = isLiked
+                        adapter.notifyItemChanged(index)
+                    }
+                }
+            }
+    }
+
+
 
 
     private fun handleComment(post: Post) {

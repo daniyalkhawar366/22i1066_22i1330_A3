@@ -3,28 +3,24 @@ package com.example.a22i1066_b_socially
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.text.InputType
 import android.util.Log
 import android.util.Patterns
 import android.view.View
-import android.view.animation.AlphaAnimation
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
-import com.google.firebase.auth.FirebaseAuthUserCollisionException
-import com.google.firebase.auth.FirebaseAuthWeakPasswordException
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import okhttp3.*
+import com.example.a22i1066_b_socially.network.RetrofitClient
+import com.example.a22i1066_b_socially.network.SignupRequest
+import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
-import java.io.IOException
+import java.io.File
+import java.io.FileOutputStream
 
 class SignupActivity : AppCompatActivity() {
 
@@ -40,17 +36,12 @@ class SignupActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var ivProfilePic: ImageView
     private lateinit var tvChangePhoto: TextView
-
-    private lateinit var auth: FirebaseAuth
-    private val db = FirebaseFirestore.getInstance()
-    private val client = OkHttpClient()
+    private lateinit var sessionManager: SessionManager
 
     private var isPasswordVisible = false
     private var selectedImageUri: Uri? = null
 
     private val TAG = "SignupActivity"
-    private val CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dihbswob7/image/upload"
-    private val UPLOAD_PRESET = "mobile_unsigned_preset"
 
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
@@ -63,6 +54,8 @@ class SignupActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.signup)
 
+        sessionManager = SessionManager(this)
+
         etFirstName = findViewById(R.id.etFirstName)
         etLastName = findViewById(R.id.etLastName)
         etDob = findViewById(R.id.etDob)
@@ -74,9 +67,7 @@ class SignupActivity : AppCompatActivity() {
         ivBackArrow = findViewById(R.id.ivbackArrow)
         progressBar = findViewById(R.id.progressBar)
         ivProfilePic = findViewById(R.id.ivProfile)
-        tvChangePhoto = findViewById(R.id.tvTitle)
-
-        auth = FirebaseAuth.getInstance()
+        tvChangePhoto = findViewById(R.id.tvSubtitle)
 
         ivTogglePassword.setOnClickListener {
             isPasswordVisible = !isPasswordVisible
@@ -103,19 +94,35 @@ class SignupActivity : AppCompatActivity() {
 
         btnCreateAccount.setOnClickListener {
             if (!validateInputs()) return@setOnClickListener
-            val first = etFirstName.text.toString().trim()
-            val last = etLastName.text.toString().trim()
+
+            val firstName = etFirstName.text.toString().trim()
+            val lastName = etLastName.text.toString().trim()
             val email = etEmail.text.toString().trim()
             val password = etPassword.text.toString()
             val dob = etDob.text.toString().trim()
             val username = etUsername.text.toString().trim()
-            createAccount(first, last, email, password, dob, username)
+
+            createAccount(firstName, lastName, email, password, dob, username)
         }
     }
-
+    private fun testBackend() {
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.testConnection()
+                if (response.isSuccessful) {
+                    Toast.makeText(this@SignupActivity, "Backend connected!", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@SignupActivity, "Backend error: ${response.code()}", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@SignupActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                Log.e(TAG, "Test failed", e)
+            }
+        }
+    }
     private fun validateInputs(): Boolean {
-        val first = etFirstName.text.toString().trim()
-        val last = etLastName.text.toString().trim()
+        val firstName = etFirstName.text.toString().trim()
+        val lastName = etLastName.text.toString().trim()
         val dob = etDob.text.toString().trim()
         val email = etEmail.text.toString().trim()
         val password = etPassword.text.toString().trim()
@@ -140,7 +147,7 @@ class SignupActivity : AppCompatActivity() {
             return false
         }
 
-        if (first.isEmpty() && last.isEmpty()) {
+        if (firstName.isEmpty() && lastName.isEmpty()) {
             etFirstName.error = "Enter at least first or last name"
             etFirstName.requestFocus()
             return false
@@ -149,151 +156,115 @@ class SignupActivity : AppCompatActivity() {
         return true
     }
 
-    private fun createAccount(firstNameInput: String, lastNameInput: String, email: String, password: String, dob: String, usernameInput: String) {
+    private fun createAccount(
+        firstName: String,
+        lastName: String,
+        email: String,
+        password: String,
+        dob: String,
+        usernameInput: String
+    ) {
         btnCreateAccount.isEnabled = false
         progressBar.visibility = View.VISIBLE
 
-        auth.createUserWithEmailAndPassword(email, password)
-            .addOnCompleteListener { task ->
-                if (!task.isSuccessful) {
-                    handleAuthError(task.exception)
-                    return@addOnCompleteListener
-                }
-
-                val uid = auth.currentUser?.uid
-                if (uid.isNullOrBlank()) {
-                    showError("Failed to obtain user id")
-                    return@addOnCompleteListener
-                }
-
-                // Upload image if selected, otherwise use default
+        lifecycleScope.launch {
+            try {
+                // Upload image only if selected
+                var profilePicUrl = ""
                 if (selectedImageUri != null) {
-                    uploadImageToCloudinary(selectedImageUri!!) { imageUrl ->
-                        if (imageUrl != null) {
-                            saveUserToFirestore(uid, firstNameInput, lastNameInput, email, dob, usernameInput, imageUrl)
-                        } else {
-                            saveUserToFirestore(uid, firstNameInput, lastNameInput, email, dob, usernameInput, "")
-                        }
+                    Log.d(TAG, "Image selected, uploading...")
+                    profilePicUrl = uploadImageToServer(selectedImageUri!!) ?: ""
+                    if (profilePicUrl.isEmpty()) {
+                        Log.w(TAG, "Image upload failed, continuing without image")
+                    }
+                }
+
+                val username = if (usernameInput.isNotBlank()) usernameInput else email.substringBefore("@")
+
+                Log.d(TAG, "Creating account for: $email")
+
+                val response = RetrofitClient.instance.signup(
+                    SignupRequest(
+                        email = email,
+                        password = password,
+                        firstName = firstName,
+                        lastName = lastName,
+                        dob = dob,
+                        username = username,
+                        profilePicUrl = profilePicUrl
+                    )
+                )
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val token = response.body()?.token ?: ""
+                    val userId = response.body()?.userId ?: ""
+
+                    sessionManager.saveAuthToken(token, userId)
+
+                    runOnUiThread {
+                        Toast.makeText(this@SignupActivity, "Account Created!", Toast.LENGTH_SHORT).show()
+                        startActivity(Intent(this@SignupActivity, FYPActivity::class.java))
+                        finish()
                     }
                 } else {
-                    saveUserToFirestore(uid, firstNameInput, lastNameInput, email, dob, usernameInput, "")
+                    val error = response.body()?.error ?: response.errorBody()?.string() ?: "Signup failed"
+                    Log.e(TAG, "Signup failed: $error")
+                    showError(error)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Signup error", e)
+                showError("Connection failed: ${e.localizedMessage}")
+            } finally {
+                runOnUiThread {
+                    btnCreateAccount.isEnabled = true
+                    progressBar.visibility = View.GONE
                 }
             }
+        }
     }
 
-    private fun uploadImageToCloudinary(uri: Uri, callback: (String?) -> Unit) {
-        val bytes = try {
-            contentResolver.openInputStream(uri)?.use { it.readBytes() }
+
+
+
+    private suspend fun uploadImageToServer(uri: Uri): String? {
+        return try {
+            val file = uriToFile(uri)
+            val requestFile = file.asRequestBody("image/jpeg".toMediaTypeOrNull())
+            val body = MultipartBody.Part.createFormData("file", file.name, requestFile)
+            val userId = "temp_${System.currentTimeMillis()}".toRequestBody("text/plain".toMediaTypeOrNull())
+
+            Log.d(TAG, "Uploading image: ${file.absolutePath}")
+
+            val response = RetrofitClient.instance.uploadProfilePic(userId, body)
+
+            file.delete()
+
+            if (response.isSuccessful && response.body()?.success == true) {
+                Log.d(TAG, "Upload success: ${response.body()?.url}")
+                response.body()?.url
+            } else {
+                Log.e(TAG, "Upload failed: ${response.errorBody()?.string()}")
+                null
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to read image", e)
+            Log.e(TAG, "Image upload exception", e)
             null
         }
-
-        if (bytes == null) {
-            callback(null)
-            return
-        }
-
-        val mediaType = "image/*".toMediaTypeOrNull()
-        val fileBody = bytes.toRequestBody(mediaType)
-        val multipartBody = MultipartBody.Builder().setType(MultipartBody.FORM)
-            .addFormDataPart("file", "profile.jpg", fileBody)
-            .addFormDataPart("upload_preset", UPLOAD_PRESET)
-            .build()
-
-        val request = Request.Builder()
-            .url(CLOUDINARY_URL)
-            .post(multipartBody)
-            .build()
-
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Cloudinary upload failed", e)
-                runOnUiThread { callback(null) }
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    if (!it.isSuccessful) {
-                        Log.e(TAG, "Upload failed: ${it.code}")
-                        runOnUiThread { callback(null) }
-                        return
-                    }
-
-                    try {
-                        val json = JSONObject(it.body?.string() ?: "{}")
-                        val secureUrl = json.optString("secure_url", json.optString("url"))
-                        runOnUiThread { callback(secureUrl.takeIf { url -> url.isNotBlank() }) }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to parse response", e)
-                        runOnUiThread { callback(null) }
-                    }
-                }
-            }
-        })
     }
 
-    private fun saveUserToFirestore(uid: String, firstName: String, lastName: String, email: String, dob: String, usernameInput: String, profilePicUrl: String) {
-        val combinedName = listOf(firstName, lastName).filter { it.isNotBlank() }.joinToString(" ")
-        val displayName = if (combinedName.isNotBlank()) {
-            combinedName
-        } else {
-            if (usernameInput.isNotBlank()) usernameInput else email.substringBefore("@").takeIf { it.isNotBlank() } ?: "user_${uid.take(6)}"
+
+    private fun uriToFile(uri: Uri): File {
+        val inputStream = contentResolver.openInputStream(uri)
+        val tempFile = File.createTempFile("upload", ".jpg", cacheDir)
+        val outputStream = FileOutputStream(tempFile)
+
+        inputStream?.use { input ->
+            outputStream.use { output ->
+                input.copyTo(output)
+            }
         }
 
-        val username = if (usernameInput.isNotBlank()) usernameInput else email.substringBefore("@").takeIf { it.isNotBlank() } ?: "user_${uid.take(6)}"
-
-        val userDoc = mapOf(
-            "id" to uid,
-            "uid" to uid,
-            "email" to email,
-            "dob" to dob,
-            "firstName" to firstName,
-            "lastName" to lastName,
-            "displayName" to displayName,
-            "username" to username,
-            "profilePicUrl" to profilePicUrl,
-            "bio" to "",
-            "website" to "",
-            "verified" to false,
-            "followersCount" to 0L,
-            "followingCount" to 0L,
-            "postsCount" to 0L,
-            "createdAt" to FieldValue.serverTimestamp()
-        )
-
-        db.collection("users").document(uid)
-            .set(userDoc)
-            .addOnSuccessListener {
-                val toast = Toast.makeText(this, "Account Created", Toast.LENGTH_SHORT)
-                val toastView = toast.view
-                val fadeIn = AlphaAnimation(0f, 1f)
-                fadeIn.duration = 400
-                toastView?.startAnimation(fadeIn)
-                toast.show()
-                uploadPendingTokenIfNeeded(this@SignupActivity)
-
-                Handler(Looper.getMainLooper()).postDelayed({
-                    progressBar.visibility = View.GONE
-                    startActivity(Intent(this, ChooseAccountActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                    })
-                    finish()
-                }, 800)
-            }
-            .addOnFailureListener { e ->
-                showError("Failed to save user: ${e.message}")
-            }
-    }
-
-    private fun handleAuthError(ex: Exception?) {
-        val message = when (ex) {
-            is FirebaseAuthWeakPasswordException -> "Weak password: ${ex.reason ?: ex.message}"
-            is FirebaseAuthInvalidCredentialsException -> "Invalid email: ${ex.message}"
-            is FirebaseAuthUserCollisionException -> "This email is already registered."
-            else -> "Signup failed: ${ex?.message ?: "unknown error"}"
-        }
-        showError(message)
+        return tempFile
     }
 
     private fun showError(message: String) {

@@ -55,11 +55,12 @@ class CommentsActivity : AppCompatActivity() {
 
     private fun initViews() {
         backBtn = findViewById(R.id.backBtn)
-        postBtn = findViewById(R.id.postBtn)
+        postBtn = findViewById(R.id.postBtn)  // Make sure this ID corresponds to a TextView in XML
         commentsRecyclerView = findViewById(R.id.commentsRecyclerView)
         commentInput = findViewById(R.id.commentInput)
         progressBar = findViewById(R.id.progressBar)
     }
+
 
     private fun setupRecyclerView() {
         adapter = CommentsAdapter(comments, currentUserId) { comment ->
