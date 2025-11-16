@@ -10,11 +10,14 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.a22i1066_b_socially.network.RetrofitClient
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -164,41 +167,36 @@ class AddPostDetailsActivity : AppCompatActivity() {
     }
 
     private fun createPostInFirestore(uid: String, imageUrls: List<String>) {
-        db.collection("users").document(uid).get()
-            .addOnSuccessListener { doc ->
-                val username = doc?.getString("username") ?: "Unknown"
-                val profilePicUrl = doc?.getString("profilePicUrl") ?: ""
-                val caption = captionInput.text.toString().trim()
+        val caption = captionInput.text.toString().trim()
+        val postId = "${uid}_${System.currentTimeMillis()}"
+        val timestamp = System.currentTimeMillis()
 
-                val postData = hashMapOf(
-                    "userId" to uid,
-                    "username" to username,
-                    "profilePicUrl" to profilePicUrl,
-                    "imageUrls" to imageUrls,
-                    "caption" to caption,
-                    "timestamp" to Timestamp.now(),
-                    "likesCount" to 0,
-                    "commentsCount" to 0
+        lifecycleScope.launch {
+            try {
+                val sessionManager = SessionManager(this@AddPostDetailsActivity)
+                val token = "Bearer ${sessionManager.getAuthToken()}"
+
+                val request = com.example.a22i1066_b_socially.network.CreatePostRequest(
+                    postId = postId,
+                    caption = caption,
+                    imageUrls = imageUrls,
+                    timestamp = timestamp
                 )
 
-                db.collection("posts").add(postData)
-                    .addOnSuccessListener {
-                        // Update user's posts count
-                        db.collection("users").document(uid)
-                            .update("postsCount", com.google.firebase.firestore.FieldValue.increment(1))
+                val response = RetrofitClient.instance.createPost(token, request)
 
-                        Log.d(TAG, "Post created successfully")
-                        runOnUiThread {
-                            Toast.makeText(this, "Post shared!", Toast.LENGTH_SHORT).show()
-                            val intent = Intent(this, MyProfileActivity::class.java)
-                            intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
-                            startActivity(intent)
-                            finish()
-                        }
+                if (response.isSuccessful && response.body()?.success == true) {
+                    Log.d(TAG, "Post created successfully")
+                    runOnUiThread {
+                        Toast.makeText(this@AddPostDetailsActivity, "Post shared!", Toast.LENGTH_SHORT).show()
+                        val intent = Intent(this@AddPostDetailsActivity, MyProfileActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+                        startActivity(intent)
+                        finish()
                     }
-                    .addOnFailureListener { e ->
-                        Log.e(TAG, "Failed to create post", e)
-                        runOnUiThread { handleUploadFailure() }
+                } else {
+                    Log.e(TAG, "Failed to create post: ${response.body()?.error}")
+                    runOnUiThread { handleUploadFailure() }
                     }
             }
             .addOnFailureListener { e ->

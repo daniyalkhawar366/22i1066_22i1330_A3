@@ -76,6 +76,8 @@ dependencies {
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("com.google.auth:google-auth-library-oauth2-http:1.19.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
 
 
     kapt("com.github.bumptech.glide:compiler:4.16.0")

@@ -1,10 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="oval">
+
     <gradient
         android:type="sweep"
-        android:useLevel="false"
-        android:startColor="#F58529"
-        android:centerColor="#DD2A7B"
-        android:endColor="#8134AF"/>
+        android:startColor="#FEDA75"
+        android:centerColor="#FA7E1E"
+        android:centerX="0.5"
+        android:centerY="0.5"
+        android:endColor="#4F5BD5"
+        android:useLevel="false" />
+
+    <!-- Transparent inner area to show the profile picture -->
+    <stroke
+        android:width="3dp"
+        android:color="@android:color/transparent" />
+
+    <size
+        android:width="72dp"
+        android:height="72dp" />
 </shape>

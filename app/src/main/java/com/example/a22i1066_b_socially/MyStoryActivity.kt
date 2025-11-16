@@ -13,20 +13,16 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
-import com.google.firebase.firestore.FirebaseFirestore
+import com.example.a22i1066_b_socially.network.RetrofitClient
+import com.example.a22i1066_b_socially.network.StoryItem
+import kotlinx.coroutines.launch
 
 class MyStoryActivity : AppCompatActivity() {
 
     private val TAG = "MyStoryActivity"
-    private val auth = FirebaseAuth.getInstance()
-    private val db = FirebaseFirestore.getInstance()
-    private val dbRealtime = FirebaseDatabase.getInstance().reference
+    private lateinit var sessionManager: SessionManager
 
     private lateinit var ivStoryImage: ImageView
     private lateinit var topProfileImage: ImageView
@@ -36,7 +32,7 @@ class MyStoryActivity : AppCompatActivity() {
     private lateinit var progressBarsContainer: LinearLayout
     private lateinit var btnMore: LinearLayout
 
-    private val stories = mutableListOf<Story>()
+    private val stories = mutableListOf<StoryItem>()
     private var currentStoryIndex = 0
     private val progressBars = mutableListOf<ProgressBar>()
     private var handler = Handler(Looper.getMainLooper())
@@ -51,6 +47,8 @@ class MyStoryActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.mystory)
+
+        sessionManager = SessionManager(this)
 
         ivStoryImage = findViewById(R.id.ivStoryImage)
         topProfileImage = findViewById(R.id.topProfileImage)
@@ -74,55 +72,73 @@ class MyStoryActivity : AppCompatActivity() {
     }
 
     private fun loadUserProfile() {
-        val uid = auth.currentUser?.uid ?: return
-        db.collection("users").document(uid).get()
-            .addOnSuccessListener { doc ->
-                val username = doc?.getString("username") ?: "User"
-                val profilePic = doc?.getString("profilePicUrl").orEmpty()
+        val userId = sessionManager.getUserId() ?: return
 
-                tvStoryUsername.text = username
-                if (profilePic.isNotBlank()) {
-                    Glide.with(this).load(profilePic).circleCrop().into(topProfileImage)
-                } else {
-                    topProfileImage.setImageResource(R.drawable.profile_pic)
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserProfile("profile", userId)
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val user = response.body()?.user
+                    runOnUiThread {
+                        tvStoryUsername.text = user?.username ?: "User"
+                        val profilePic = user?.profilePicUrl ?: ""
+                        if (profilePic.isNotBlank()) {
+                            Glide.with(this@MyStoryActivity).load(profilePic).circleCrop().into(topProfileImage)
+                        } else {
+                            topProfileImage.setImageResource(R.drawable.profile_pic)
+                        }
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load user profile", e)
             }
+        }
     }
 
     private fun loadStories() {
-        val uid = auth.currentUser?.uid ?: return
-        dbRealtime.child("stories").child(uid)
-            .addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
+        val userId = sessionManager.getUserId() ?: return
+        val token = "Bearer ${sessionManager.getAuthToken()}"
+
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserStories(token, userId)
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val loadedStories = response.body()?.stories ?: emptyList()
+
                     stories.clear()
-                    for (child in snapshot.children) {
-                        val story = child.getValue(Story::class.java)
-                        if (story != null && !isStoryExpired(story)) {
-                            stories.add(story)
+                    stories.addAll(loadedStories.filter { !isStoryExpired(it) })
+
+                    runOnUiThread {
+                        if (stories.isEmpty()) {
+                            Toast.makeText(this@MyStoryActivity, "No stories available", Toast.LENGTH_SHORT).show()
+                            finish()
+                            return@runOnUiThread
                         }
-                    }
 
-                    if (stories.isEmpty()) {
-                        Toast.makeText(this@MyStoryActivity, "No stories available", Toast.LENGTH_SHORT).show()
+                        stories.sortBy { it.uploadedAt }
+                        Log.d(TAG, "Loaded ${stories.size} stories")
+                        setupProgressBars()
+                        showStory(0)
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this@MyStoryActivity, "Failed to load stories", Toast.LENGTH_SHORT).show()
                         finish()
-                        return
                     }
-
-                    stories.sortBy { it.uploadedAt }
-                    Log.d(TAG, "Loaded ${stories.size} stories")
-                    setupProgressBars()
-                    showStory(0)
                 }
-
-                override fun onCancelled(error: DatabaseError) {
-                    Log.e(TAG, "Failed to load stories", error.toException())
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load stories", e)
+                runOnUiThread {
                     Toast.makeText(this@MyStoryActivity, "Failed to load stories", Toast.LENGTH_SHORT).show()
                     finish()
                 }
-            })
+            }
+        }
     }
 
-    private fun isStoryExpired(story: Story): Boolean {
+    private fun isStoryExpired(story: StoryItem): Boolean {
         return System.currentTimeMillis() > story.expiresAt
     }
 
@@ -314,33 +330,49 @@ class MyStoryActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun deleteCurrentStory(story: Story) {
-        val uid = auth.currentUser?.uid ?: return
+    private fun deleteCurrentStory(story: StoryItem) {
+        val token = "Bearer ${sessionManager.getAuthToken()}"
 
-        dbRealtime.child("stories").child(uid).child(story.storyId).removeValue()
-            .addOnSuccessListener {
-                Toast.makeText(this, "Story deleted", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            try {
+                // Call backend API to delete the story
+                val request = com.example.a22i1066_b_socially.network.DeleteStoryRequest(story.storyId)
+                val response = RetrofitClient.instance.deleteStory(token, request)
 
-                // Remove from local list
-                stories.removeAt(currentStoryIndex)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    runOnUiThread {
+                        Toast.makeText(this@MyStoryActivity, "Story deleted", Toast.LENGTH_SHORT).show()
 
-                if (stories.isEmpty()) {
-                    finish()
-                    return@addOnSuccessListener
-                }
+                        // Remove from local list
+                        stories.removeAt(currentStoryIndex)
 
-                // Recreate progress bars and show appropriate story
-                setupProgressBars()
-                if (currentStoryIndex >= stories.size) {
-                    showStory(stories.size - 1)
+                        if (stories.isEmpty()) {
+                            finish()
+                            return@runOnUiThread
+                        }
+
+                        // Recreate progress bars and show appropriate story
+                        setupProgressBars()
+                        if (currentStoryIndex >= stories.size) {
+                            showStory(stories.size - 1)
+                        } else {
+                            showStory(currentStoryIndex)
+                        }
+                    }
                 } else {
-                    showStory(currentStoryIndex)
+                    val errorMsg = response.body()?.error ?: "Failed to delete story"
+                    Log.e(TAG, "Delete failed: $errorMsg")
+                    runOnUiThread {
+                        Toast.makeText(this@MyStoryActivity, errorMsg, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to delete story", e)
+                runOnUiThread {
+                    Toast.makeText(this@MyStoryActivity, "Failed to delete story: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to delete story", e)
-                Toast.makeText(this, "Failed to delete story", Toast.LENGTH_SHORT).show()
-            }
+        }
     }
 
     private fun getTimeAgo(timestamp: Long): String {

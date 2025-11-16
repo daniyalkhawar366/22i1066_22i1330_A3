@@ -11,31 +11,22 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.firestore.FirebaseFirestore
+import com.example.a22i1066_b_socially.network.RetrofitClient
+import com.example.a22i1066_b_socially.network.UploadStoryRequest
+import kotlinx.coroutines.launch
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import org.json.JSONObject
-import java.io.IOException
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
 
 class UploadStoryActivity : AppCompatActivity() {
 
     private val TAG = "UploadStoryActivity"
 
-    private val auth = FirebaseAuth.getInstance()
-    private val db = FirebaseFirestore.getInstance()
-    private val dbRealtime = FirebaseDatabase.getInstance().reference
+    private lateinit var sessionManager: SessionManager
 
-    private val CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dihbswob7/image/upload"
-    private val UPLOAD_PRESET = "mobile_unsigned_preset"
-
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-        .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-        .build()
 
     private lateinit var storyImageView: ImageView
     private lateinit var closeBtn: ImageView
@@ -50,36 +41,55 @@ class UploadStoryActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.upload_story)
 
-        storyImageView = findViewById(R.id.storyImage)
-        closeBtn = findViewById(R.id.closebtn)
-        sendBtn = findViewById(R.id.sendbtn)
-        btnYourStories = findViewById(R.id.btnYourStories)
-        btnCloseFriends = findViewById(R.id.btnCloseFriends)
-        ivYourStoryAvatar = findViewById(R.id.ivYourStoryAvatar)
-        uploadProgress = findViewById(R.id.uploadProgress)
+        try {
+            setContentView(R.layout.upload_story)
 
-        uploadProgress.visibility = android.view.View.GONE
+            sessionManager = SessionManager(this)
 
-        val uriStr = intent.getStringExtra("imageUri")
-        if (uriStr.isNullOrBlank()) {
-            Toast.makeText(this, "No image provided", Toast.LENGTH_SHORT).show()
-            finish()
-            return
-        }
+            storyImageView = findViewById(R.id.storyImage)
+            closeBtn = findViewById(R.id.closebtn)
+            sendBtn = findViewById(R.id.sendbtn)
+            btnYourStories = findViewById(R.id.btnYourStories)
+            btnCloseFriends = findViewById(R.id.btnCloseFriends)
+            ivYourStoryAvatar = findViewById(R.id.ivYourStoryAvatar)
+            uploadProgress = findViewById(R.id.uploadProgress)
 
-        imageUri = Uri.parse(uriStr)
-        Glide.with(this).load(imageUri).centerCrop().into(storyImageView)
+            uploadProgress.visibility = android.view.View.GONE
 
-        loadProfilePic()
+            val uriStr = intent.getStringExtra("imageUri")
+            Log.d(TAG, "Received imageUri: $uriStr")
 
-        closeBtn.setOnClickListener {
-            if (!isUploading) {
+            if (uriStr.isNullOrBlank()) {
+                Toast.makeText(this, "No image provided", Toast.LENGTH_SHORT).show()
                 finish()
-            } else {
-                Toast.makeText(this, "Upload in progress...", Toast.LENGTH_SHORT).show()
+                return
             }
+
+            try {
+                imageUri = Uri.parse(uriStr)
+                Log.d(TAG, "Parsed URI: $imageUri, scheme: ${imageUri?.scheme}, path: ${imageUri?.path}")
+                Glide.with(this).load(imageUri).centerCrop().into(storyImageView)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse or load URI", e)
+                Toast.makeText(this, "Failed to load image", Toast.LENGTH_SHORT).show()
+                finish()
+                return
+            }
+
+            loadProfilePic()
+
+            closeBtn.setOnClickListener {
+                if (!isUploading) {
+                    finish()
+                } else {
+                    Toast.makeText(this, "Upload in progress...", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Critical error in onCreate", e)
+            Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+            finish()
         }
 
         btnYourStories.setOnClickListener {
@@ -104,19 +114,37 @@ class UploadStoryActivity : AppCompatActivity() {
     }
 
     private fun loadProfilePic() {
-        val uid = auth.currentUser?.uid ?: return
-        db.collection("users").document(uid).get()
-            .addOnSuccessListener { doc ->
-                val pic = doc?.getString("profilePicUrl").orEmpty()
-                if (pic.isNotBlank()) {
-                    Glide.with(this).load(pic).circleCrop().into(ivYourStoryAvatar)
+        val userId = sessionManager.getUserId() ?: return
+
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserProfile("profile", userId)
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val profilePicUrl = response.body()?.user?.profilePicUrl
+
+                    runOnUiThread {
+                        if (!profilePicUrl.isNullOrBlank()) {
+                            Glide.with(this@UploadStoryActivity)
+                                .load(profilePicUrl)
+                                .circleCrop()
+                                .into(ivYourStoryAvatar)
+                        } else {
+                            ivYourStoryAvatar.setImageResource(R.drawable.profile_pic)
+                        }
+                    }
                 } else {
+                    runOnUiThread {
+                        ivYourStoryAvatar.setImageResource(R.drawable.profile_pic)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load profile pic", e)
+                runOnUiThread {
                     ivYourStoryAvatar.setImageResource(R.drawable.profile_pic)
                 }
             }
-            .addOnFailureListener {
-                ivYourStoryAvatar.setImageResource(R.drawable.profile_pic)
-            }
+        }
     }
 
     private fun uploadStory(closeFriendsOnly: Boolean) {
@@ -126,8 +154,8 @@ class UploadStoryActivity : AppCompatActivity() {
             return
         }
 
-        val uid = auth.currentUser?.uid
-        if (uid.isNullOrBlank()) {
+        val userId = sessionManager.getUserId()
+        if (userId.isNullOrBlank()) {
             Toast.makeText(this, "Not logged in", Toast.LENGTH_SHORT).show()
             return
         }
@@ -142,40 +170,112 @@ class UploadStoryActivity : AppCompatActivity() {
         btnCloseFriends.isEnabled = false
         sendBtn.isEnabled = false
 
-        val bytes = try {
-            contentResolver.openInputStream(uri)?.use { it.readBytes() }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to read image bytes", e)
-            null
-        }
+        // Upload image to PHP backend
+        lifecycleScope.launch {
+            try {
+                uploadProgress.progress = 10
 
-        if (bytes == null) {
-            resetUploadState()
-            Toast.makeText(this, "Failed to read image", Toast.LENGTH_LONG).show()
-            return
-        }
+                Log.d(TAG, "Starting upload for URI: $uri, scheme: ${uri.scheme}")
 
-        val progressBody = ProgressRequestBody(bytes, "image/*") { percent ->
-            runOnUiThread {
-                uploadProgress.progress = percent
-                Log.d(TAG, "Upload progress: $percent%")
-            }
-        }
+                // Read file bytes from URI (handle both file:// and content:// URIs)
+                val fileBytes = try {
+                    when (uri.scheme?.lowercase()) {
+                        "file" -> {
+                            // For file:// URIs (camera), read directly from file
+                            val path = uri.path
+                            if (path.isNullOrBlank()) {
+                                Log.e(TAG, "File path is null or blank")
+                                null
+                            } else {
+                                Log.d(TAG, "Reading from file: $path")
+                                val file = File(path)
+                                if (file.exists()) {
+                                    file.readBytes()
+                                } else {
+                                    Log.e(TAG, "File does not exist: $path")
+                                    null
+                                }
+                            }
+                        }
+                        "content" -> {
+                            // For content:// URIs (gallery), use content resolver
+                            Log.d(TAG, "Reading from content resolver")
+                            val inputStream = contentResolver.openInputStream(uri)
+                            val bytes = inputStream?.readBytes()
+                            inputStream?.close()
+                            bytes
+                        }
+                        else -> {
+                            // Try content resolver as fallback
+                            Log.d(TAG, "Unknown scheme, trying content resolver")
+                            val inputStream = contentResolver.openInputStream(uri)
+                            val bytes = inputStream?.readBytes()
+                            inputStream?.close()
+                            bytes
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to read file: ${e.message}", e)
+                    null
+                }
 
-        val multipartBody = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart("file", "story.jpg", progressBody)
-            .addFormDataPart("upload_preset", UPLOAD_PRESET)
-            .build()
+                if (fileBytes == null) {
+                    runOnUiThread {
+                        resetUploadState()
+                        Toast.makeText(
+                            this@UploadStoryActivity,
+                            "Failed to read image",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    return@launch
+                }
 
-        val request = Request.Builder()
-            .url(CLOUDINARY_URL)
-            .post(multipartBody)
-            .build()
+                uploadProgress.progress = 30
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Cloudinary upload failed", e)
+                // Create multipart request
+                val requestFile = RequestBody.create("image/jpeg".toMediaTypeOrNull(), fileBytes)
+                val body = MultipartBody.Part.createFormData("file", "story_${System.currentTimeMillis()}.jpg", requestFile)
+                val userIdBody = userId.toRequestBody("text/plain".toMediaTypeOrNull())
+
+                uploadProgress.progress = 50
+
+                // Upload to PHP backend
+                val uploadResponse = RetrofitClient.instance.uploadProfilePic(userIdBody, body)
+
+                uploadProgress.progress = 70
+
+                if (uploadResponse.isSuccessful && uploadResponse.body()?.success == true) {
+                    val imageUrl = uploadResponse.body()?.url
+
+                    if (imageUrl.isNullOrBlank()) {
+                        runOnUiThread {
+                            resetUploadState()
+                            Toast.makeText(
+                                this@UploadStoryActivity,
+                                "Upload failed: No URL returned",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        return@launch
+                    }
+
+                    uploadProgress.progress = 80
+
+                    // Save story to database
+                    saveStoryToBackend(userId, imageUrl, closeFriendsOnly)
+                } else {
+                    runOnUiThread {
+                        resetUploadState()
+                        Toast.makeText(
+                            this@UploadStoryActivity,
+                            "Upload failed: ${uploadResponse.body()?.error}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Upload failed", e)
                 runOnUiThread {
                     resetUploadState()
                     Toast.makeText(
@@ -185,102 +285,55 @@ class UploadStoryActivity : AppCompatActivity() {
                     ).show()
                 }
             }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    if (!it.isSuccessful) {
-                        val bodyStr = it.body?.string().orEmpty()
-                        Log.e(TAG, "Cloudinary error: ${it.code} body=$bodyStr")
-                        runOnUiThread {
-                            resetUploadState()
-                            Toast.makeText(
-                                this@UploadStoryActivity,
-                                "Upload failed: ${it.code}",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-                        return
-                    }
-
-                    val bodyStr = it.body?.string().orEmpty()
-                    try {
-                        val json = JSONObject(bodyStr)
-                        val secureUrl = json.optString("secure_url", json.optString("url"))
-                        if (secureUrl.isNullOrBlank()) {
-                            Log.e(TAG, "No secure_url in response: $bodyStr")
-                            runOnUiThread {
-                                resetUploadState()
-                                Toast.makeText(
-                                    this@UploadStoryActivity,
-                                    "Upload succeeded but no URL returned",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-                            return
-                        }
-
-                        saveStoryToFirebase(uid, secureUrl, closeFriendsOnly)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to parse Cloudinary response", e)
-                        runOnUiThread {
-                            resetUploadState()
-                            Toast.makeText(
-                                this@UploadStoryActivity,
-                                "Upload succeeded but response invalid",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    }
-                }
-            }
-        })
+        }
     }
 
-    private fun saveStoryToFirebase(uid: String, imageUrl: String, closeFriendsOnly: Boolean) {
-        val storyId = dbRealtime.child("stories").child(uid).push().key
-        if (storyId == null) {
-            runOnUiThread {
-                resetUploadState()
-                Toast.makeText(this, "Failed to generate story ID", Toast.LENGTH_SHORT).show()
-            }
-            return
-        }
+    private fun saveStoryToBackend(userId: String, imageUrl: String, closeFriendsOnly: Boolean) {
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${sessionManager.getAuthToken()}"
+                val request = UploadStoryRequest(imageUrl, closeFriendsOnly)
 
-        val now = System.currentTimeMillis()
-        val expiresAt = now + (24 * 60 * 60 * 1000) // 24 hours
+                val response = RetrofitClient.instance.uploadStory(token, request)
 
-        val storyData = mapOf(
-            "storyId" to storyId,
-            "userId" to uid,
-            "imageUrl" to imageUrl,
-            "uploadedAt" to now,
-            "expiresAt" to expiresAt,
-            "closeFriendsOnly" to closeFriendsOnly
-        )
+                if (response.isSuccessful && response.body()?.success == true) {
+                    Log.d(TAG, "Story saved successfully to backend")
+                    runOnUiThread {
+                        uploadProgress.progress = 100
+                        Toast.makeText(this@UploadStoryActivity, "Story uploaded!", Toast.LENGTH_SHORT).show()
 
-        dbRealtime.child("stories").child(uid).child(storyId).setValue(storyData)
-            .addOnSuccessListener {
-                Log.d(TAG, "Story saved successfully to Realtime DB")
-                runOnUiThread {
-                    uploadProgress.progress = 100
-                    Toast.makeText(this, "Story uploaded!", Toast.LENGTH_SHORT).show()
-
-                    // Delay before navigating to allow user to see completion
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        val intent = Intent(this, FYPActivity::class.java)
-                        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        startActivity(intent)
-                        finish()
-                    }, 500)
+                        // Delay before navigating to allow user to see completion
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            val intent = Intent(this@UploadStoryActivity, FYPActivity::class.java)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            startActivity(intent)
+                            finish()
+                        }, 500)
+                    }
+                } else {
+                    val errorMsg = response.body()?.error ?: "Unknown error"
+                    Log.e(TAG, "Failed to save story to backend: $errorMsg")
+                    runOnUiThread {
+                        resetUploadState()
+                        Toast.makeText(
+                            this@UploadStoryActivity,
+                            "Failed to save story: $errorMsg",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to save story to Realtime DB", e)
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception saving story to backend", e)
                 runOnUiThread {
                     resetUploadState()
-                    Toast.makeText(this, "Failed to save story: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        this@UploadStoryActivity,
+                        "Failed to save story: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
+        }
     }
 
     private fun resetUploadState() {

@@ -9,17 +9,16 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.a22i1066_b_socially.network.RetrofitClient
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
+import kotlinx.coroutines.launch
 
 class CommentsActivity : AppCompatActivity() {
 
     private val TAG = "CommentsActivity"
-    private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
 
     private lateinit var backBtn: ImageView
@@ -37,7 +36,8 @@ class CommentsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_comments)
 
-        currentUserId = auth.currentUser?.uid ?: ""
+        val sessionManager = SessionManager(this)
+        currentUserId = sessionManager.getUserId() ?: ""
         postId = intent.getStringExtra("postId") ?: ""
 
         if (currentUserId.isEmpty() || postId.isEmpty()) {
@@ -55,12 +55,11 @@ class CommentsActivity : AppCompatActivity() {
 
     private fun initViews() {
         backBtn = findViewById(R.id.backBtn)
-        postBtn = findViewById(R.id.postBtn)  // Make sure this ID corresponds to a TextView in XML
+        postBtn = findViewById(R.id.postBtn)
         commentsRecyclerView = findViewById(R.id.commentsRecyclerView)
         commentInput = findViewById(R.id.commentInput)
         progressBar = findViewById(R.id.progressBar)
     }
-
 
     private fun setupRecyclerView() {
         adapter = CommentsAdapter(comments, currentUserId) { comment ->
@@ -73,36 +72,44 @@ class CommentsActivity : AppCompatActivity() {
     private fun loadComments() {
         progressBar.visibility = View.VISIBLE
 
-        db.collection("posts").document(postId)
-            .collection("comments")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Error loading comments", error)
-                    progressBar.visibility = View.GONE
-                    return@addSnapshotListener
-                }
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@CommentsActivity).getAuthToken()}"
+                val response = RetrofitClient.instance.getComments(token, postId)
 
-                comments.clear()
-                snapshot?.documents?.forEach { doc ->
-                    try {
-                        val comment = Comment(
-                            commentId = doc.id,
-                            userId = doc.getString("userId") ?: "",
-                            username = doc.getString("username") ?: "",
-                            profilePicUrl = doc.getString("profilePicUrl") ?: "",
-                            text = doc.getString("text") ?: "",
-                            timestamp = doc.getLong("timestamp") ?: 0L
-                        )
-                        comments.add(comment)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing comment", e)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val commentsData = response.body()?.comments ?: emptyList()
+
+                    comments.clear()
+                    commentsData.forEach { commentItem ->
+                        comments.add(Comment(
+                            commentId = commentItem.id,
+                            userId = commentItem.userId,
+                            username = commentItem.username,
+                            profilePicUrl = commentItem.profilePicUrl,
+                            text = commentItem.text,
+                            timestamp = commentItem.timestamp
+                        ))
+                    }
+
+                    runOnUiThread {
+                        adapter.notifyDataSetChanged()
+                        progressBar.visibility = View.GONE
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this@CommentsActivity, "Failed to load comments", Toast.LENGTH_SHORT).show()
+                        progressBar.visibility = View.GONE
                     }
                 }
-
-                adapter.notifyDataSetChanged()
-                progressBar.visibility = View.GONE
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading comments", e)
+                runOnUiThread {
+                    Toast.makeText(this@CommentsActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    progressBar.visibility = View.GONE
+                }
             }
+        }
     }
 
     private fun postComment() {
@@ -115,37 +122,44 @@ class CommentsActivity : AppCompatActivity() {
         progressBar.visibility = View.VISIBLE
         postBtn.isEnabled = false
 
-        db.collection("users").document(currentUserId).get()
-            .addOnSuccessListener { userDoc ->
-                val username = userDoc.getString("username") ?: ""
-                val profilePicUrl = userDoc.getString("profilePicUrl") ?: ""
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@CommentsActivity).getAuthToken()}"
+                val commentId = "${currentUserId}_${System.currentTimeMillis()}"
+                val timestamp = System.currentTimeMillis()
 
-                val commentData = hashMapOf(
-                    "userId" to currentUserId,
-                    "username" to username,
-                    "profilePicUrl" to profilePicUrl,
-                    "text" to text,
-                    "timestamp" to System.currentTimeMillis()
+                val request = com.example.a22i1066_b_socially.network.AddCommentRequest(
+                    postId = postId,
+                    commentId = commentId,
+                    text = text,
+                    timestamp = timestamp
                 )
 
-                db.collection("posts").document(postId)
-                    .collection("comments")
-                    .add(commentData)
-                    .addOnSuccessListener {
-                        db.collection("posts").document(postId)
-                            .update("commentsCount", FieldValue.increment(1))
+                val response = RetrofitClient.instance.addComment(token, request)
 
+                if (response.isSuccessful && response.body()?.success == true) {
+                    runOnUiThread {
                         commentInput.setText("")
+                        loadComments() // Reload comments to show the new one
                         progressBar.visibility = View.GONE
                         postBtn.isEnabled = true
                     }
-                    .addOnFailureListener { e ->
-                        Log.e(TAG, "Error posting comment", e)
-                        Toast.makeText(this, "Failed to post comment", Toast.LENGTH_SHORT).show()
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this@CommentsActivity, "Failed to post comment", Toast.LENGTH_SHORT).show()
                         progressBar.visibility = View.GONE
                         postBtn.isEnabled = true
                     }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error posting comment", e)
+                runOnUiThread {
+                    Toast.makeText(this@CommentsActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    progressBar.visibility = View.GONE
+                    postBtn.isEnabled = true
+                }
             }
+        }
     }
 
     private fun deleteComment(comment: Comment) {

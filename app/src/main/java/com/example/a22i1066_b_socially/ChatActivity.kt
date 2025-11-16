@@ -1,4 +1,3 @@
-// kotlin
 package com.example.a22i1066_b_socially
 
 import android.content.Intent
@@ -13,16 +12,15 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
+import com.example.a22i1066_b_socially.network.RetrofitClient
+import com.example.a22i1066_b_socially.SessionManager
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.*
-import kotlin.compareTo
-import kotlin.dec
-import kotlin.text.get
-import kotlin.text.set
+import kotlin.text.clear
 
 class ChatActivity : AppCompatActivity() {
     private val TAG = "ChatActivity"
@@ -31,43 +29,28 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var adapter: ChatUserAdapter
     private lateinit var tvUsername: TextView
     private lateinit var progressLoading: ProgressBar
+    private lateinit var sessionManager: SessionManager
 
     private val allUsers = mutableListOf<User>()
     private val displayUsers = mutableListOf<User>()
-    private var authRetryAttempts = 0
-    private val MAX_AUTH_RETRIES = 3
-
-    private val db = FirebaseFirestore.getInstance()
     private var isLoading = false
     private var currentQuery: String = ""
-    private var pendingLastFetches = 0
+    private var isPolling = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.chats)
 
+        sessionManager = SessionManager(this)
+
         homebutton = findViewById(R.id.backArrow)
         homebutton.setOnClickListener { finish() }
 
         tvUsername = findViewById(R.id.tvUsername)
-        tvUsername.text = ""
+        tvUsername.text = sessionManager.getUsername() ?: ""
 
         progressLoading = findViewById(R.id.progressLoading)
         progressLoading.visibility = View.VISIBLE
-
-        val currentId = getCurrentUserId()
-        if (currentId.isBlank()) {
-            tvUsername.text = ""
-        } else {
-            db.collection("users").document(currentId).get()
-                .addOnSuccessListener { doc ->
-                    val username = doc.getString("username") ?: doc.getString("displayName") ?: ""
-                    tvUsername.text = username.ifBlank { "" }
-                }
-                .addOnFailureListener {
-                    tvUsername.text = ""
-                }
-        }
 
         recyclerView = findViewById(R.id.chatRecyclerView)
         adapter = ChatUserAdapter(displayUsers) { user ->
@@ -75,7 +58,7 @@ class ChatActivity : AppCompatActivity() {
                 putExtra("receiverUserId", user.id)
                 putExtra("receiverUsername", user.username)
                 putExtra("RECEIVER_PROFILE_URL", user.profilePicUrl)
-                putExtra("CURRENT_USER_ID", getCurrentUserId())
+                putExtra("CURRENT_USER_ID", sessionManager.getUserId())
             }
             startActivity(intent)
         }
@@ -93,143 +76,116 @@ class ChatActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
 
-        loadUsers()
+        loadChats()
+        startPolling()
     }
 
     override fun onResume() {
         super.onResume()
-        if (!isLoading) loadUsers()
+        if (!isLoading) loadChats()
     }
 
-    private fun getCurrentUserId(): String {
-        return FirebaseAuth.getInstance().currentUser?.uid ?: ""
+    override fun onPause() {
+        super.onPause()
+        isPolling = false
     }
 
-    private fun loadUsers() {
+    private fun startPolling() {
+        isPolling = true
+        lifecycleScope.launch {
+            while (isPolling) {
+                delay(3000) // Poll every 3 seconds
+                if (!isLoading) {
+                    loadChats(silent = true)
+                }
+            }
+        }
+    }
+
+    private fun loadChats(silent: Boolean = false) {
         if (isLoading) return
         isLoading = true
-        progressLoading.visibility = View.VISIBLE
-        recyclerView.visibility = View.GONE
 
-        allUsers.clear()
-        displayUsers.clear()
-        adapter.notifyDataSetChanged()
-
-        val currentId = getCurrentUserId()
-        if (currentId.isBlank()) {
-            authRetryAttempts++
-            if (authRetryAttempts <= MAX_AUTH_RETRIES) {
-                progressLoading.postDelayed({
-                    isLoading = false
-                    loadUsers()
-                }, 400)
-                return
-            } else {
-                isLoading = false
-                progressLoading.visibility = View.GONE
-                Toast.makeText(this, "Not signed in", Toast.LENGTH_SHORT).show()
-                return
-            }
+        if (!silent) {
+            progressLoading.visibility = View.VISIBLE
+            recyclerView.visibility = View.GONE
         }
 
-        db.collection("users")
-            .get()
-            .addOnSuccessListener { snap ->
-                val fetched = mutableListOf<User>()
-                for (doc in snap.documents) {
-                    val id = doc.id
-                    if (id == currentId) continue
-
-                    // prefer username/displayName; skip unknown/blank users
-                    val uname = doc.getString("username") ?: doc.getString("displayName") ?: ""
-                    if (uname.isBlank()) continue
-
-                    val user = User(
-                        id = id,
-                        username = uname,
-                        profilePicUrl = doc.getString("profilePicUrl"),
-                        lastMessage = null,
-                        lastTimestamp = 0L
-                    )
-                    fetched.add(user)
-                }
-
-                if (fetched.isEmpty()) {
-                    allUsers.clear()
-                    displayUsers.clear()
-                    adapter.notifyDataSetChanged()
-                    isLoading = false
-                    progressLoading.visibility = View.GONE
-                    return@addOnSuccessListener
-                }
-
-                allUsers.clear()
-                allUsers.addAll(fetched)
-                pendingLastFetches = allUsers.size
-                for (u in allUsers) {
-                    fetchLastMessageForUser(currentId, u.id)
-                }
-            }
-            .addOnFailureListener { e ->
-                Log.w(TAG, "Failed to load users", e)
-                isLoading = false
-                progressLoading.visibility = View.GONE
-                Toast.makeText(this, "Failed to load chats", Toast.LENGTH_SHORT).show()
-            }
-    }
-
-    private fun fetchLastMessageForUser(currentId: String, otherUserId: String) {
-        val chatId = if (currentId < otherUserId) "${currentId}_${otherUserId}" else "${otherUserId}_${currentId}"
-        db.collection("chats").document(chatId).collection("messages")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(1)
-            .get()
-            .addOnSuccessListener { snap ->
-                val lastDoc = snap.documents.firstOrNull()
-                val messageType = lastDoc?.getString("type") ?: "text"
-
-                val lastText = when (messageType) {
-                    "image" -> "📷 Image"
-                    "mixed" -> {
-                        val text = lastDoc?.getString("text")
-                        if (text.isNullOrBlank()) "📷 Image" else text
-                    }
-                    else -> lastDoc?.getString("text")
-                }
-
-                val ts = lastDoc?.getTimestamp("timestamp")
-                val tsMillis = ts?.toDate()?.time ?: lastDoc?.getLong("timestamp") ?: 0L
-
-                val idx = allUsers.indexOfFirst { it.id == otherUserId }
-                if (idx != -1) {
-                    val u = allUsers[idx]
-                    allUsers[idx] = u.copy(lastMessage = lastText, lastTimestamp = tsMillis)
-                }
-
-                pendingLastFetches--
-                if (pendingLastFetches <= 0) finalizeUserLoad()
-            }
-            .addOnFailureListener { e ->
-                Log.w(TAG, "Failed to fetch last message for $otherUserId", e)
-                pendingLastFetches--
-                if (pendingLastFetches <= 0) finalizeUserLoad()
-            }
-    }
-
-
-    private fun finalizeUserLoad() {
-        runOnUiThread {
-            sortAllUsers()
-            applyFilter(currentQuery)
-            progressLoading.visibility = View.GONE
+        val token = sessionManager.getToken()
+        if (token.isNullOrBlank()) {
             isLoading = false
-            recyclerView.visibility = View.VISIBLE
+            progressLoading.visibility = View.GONE
+            Toast.makeText(this, "Not logged in", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                // First try to load existing chats
+                val chatResponse = RetrofitClient.instance.getChatList("Bearer $token")
+
+                if (chatResponse.isSuccessful && chatResponse.body()?.success == true) {
+                    val chatItems = chatResponse.body()?.chats ?: emptyList()
+                    allUsers.clear()
+
+                    chatItems.forEach { chat ->
+                        allUsers.add(
+                            User(
+                                id = chat.otherUserId,
+                                username = chat.otherUsername,
+                                profilePicUrl = chat.otherProfilePic,
+                                lastMessage = chat.lastMessage,
+                                lastTimestamp = chat.lastTimestamp
+                            )
+                        )
+                    }
+                }
+
+                // If no chats exist, load all users instead
+                if (allUsers.isEmpty()) {
+                    val usersResponse = RetrofitClient.instance.getAllUsers("Bearer $token")
+
+                    if (usersResponse.isSuccessful && usersResponse.body()?.success == true) {
+                        val userItems = usersResponse.body()?.users ?: emptyList()
+
+                        userItems.forEach { user ->
+                            allUsers.add(
+                                User(
+                                    id = user.userId,
+                                    username = user.username,
+                                    profilePicUrl = user.profilePic,
+                                    lastMessage = "Start a conversation",
+                                    lastTimestamp = 0L
+                                )
+                            )
+                        }
+                    }
+                }
+
+                sortAllUsers()
+                applyFilter(currentQuery)
+
+                if (!silent) {
+                    recyclerView.visibility = View.VISIBLE
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading chats/users", e)
+                if (!silent) {
+                    Toast.makeText(this@ChatActivity, "Network error", Toast.LENGTH_SHORT).show()
+                }
+            } finally {
+                isLoading = false
+                if (!silent) {
+                    progressLoading.visibility = View.GONE
+                }
+            }
         }
     }
+
 
     private fun sortAllUsers() {
         allUsers.sortWith(compareByDescending<User> { it.lastTimestamp }
-            .thenComparator(Comparator { a, b -> (a.username ?: "").compareTo(b.username ?: "", ignoreCase = true) }))
+            .thenBy(String.CASE_INSENSITIVE_ORDER) { it.username ?: "" })
     }
 
     private fun applyFilter(query: String) {
@@ -245,12 +201,5 @@ class ChatActivity : AppCompatActivity() {
             }
         }
         runOnUiThread { adapter.notifyDataSetChanged() }
-    }
-
-    private fun <T> Comparator<T>.thenComparator(other: Comparator<T>): Comparator<T> {
-        return Comparator { a, b ->
-            val first = this.compare(a, b)
-            if (first != 0) first else other.compare(a, b)
-        }
     }
 }

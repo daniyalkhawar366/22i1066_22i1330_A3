@@ -13,20 +13,16 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
-import com.google.firebase.firestore.FirebaseFirestore
+import com.example.a22i1066_b_socially.network.RetrofitClient
+import com.example.a22i1066_b_socially.network.StoryItem
+import kotlinx.coroutines.launch
 
 class OtherUserStoryActivity : AppCompatActivity() {
 
     private val TAG = "OtherUserStoryActivity"
-    private val auth = FirebaseAuth.getInstance()
-    private val db = FirebaseFirestore.getInstance()
-    private val dbRealtime = FirebaseDatabase.getInstance().reference
+    private lateinit var sessionManager: SessionManager
 
     private lateinit var ivStoryImage: ImageView
     private lateinit var topProfileImage: ImageView
@@ -38,7 +34,7 @@ class OtherUserStoryActivity : AppCompatActivity() {
     private lateinit var ivLike: ImageView
     private lateinit var ivSend: ImageView
 
-    private val stories = mutableListOf<Story>()
+    private val stories = mutableListOf<StoryItem>()
     private var currentStoryIndex = 0
     private val progressBars = mutableListOf<ProgressBar>()
     private var handler = Handler(Looper.getMainLooper())
@@ -55,6 +51,7 @@ class OtherUserStoryActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.ammanstory)
 
+        sessionManager = SessionManager(this)
         storyUserId = intent.getStringExtra("storyUserId")
 
         if (storyUserId == null) {
@@ -96,54 +93,72 @@ class OtherUserStoryActivity : AppCompatActivity() {
 
     private fun loadUserProfile() {
         val userId = storyUserId ?: return
-        db.collection("users").document(userId).get()
-            .addOnSuccessListener { doc ->
-                val username = doc?.getString("username") ?: "User"
-                val profilePic = doc?.getString("profilePicUrl").orEmpty()
 
-                tvStoryUsername.text = username
-                if (profilePic.isNotBlank()) {
-                    Glide.with(this).load(profilePic).circleCrop().into(topProfileImage)
-                } else {
-                    topProfileImage.setImageResource(R.drawable.profile_pic)
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserProfile("profile", userId)
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val user = response.body()?.user
+                    runOnUiThread {
+                        tvStoryUsername.text = user?.username ?: "User"
+                        val profilePic = user?.profilePicUrl ?: ""
+                        if (profilePic.isNotBlank()) {
+                            Glide.with(this@OtherUserStoryActivity).load(profilePic).circleCrop().into(topProfileImage)
+                        } else {
+                            topProfileImage.setImageResource(R.drawable.profile_pic)
+                        }
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load user profile", e)
             }
+        }
     }
 
     private fun loadStories() {
         val userId = storyUserId ?: return
-        dbRealtime.child("stories").child(userId)
-            .addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
+        val token = "Bearer ${sessionManager.getAuthToken()}"
+
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserStories(token, userId)
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val loadedStories = response.body()?.stories ?: emptyList()
+
                     stories.clear()
-                    for (child in snapshot.children) {
-                        val story = child.getValue(Story::class.java)
-                        if (story != null && !isStoryExpired(story)) {
-                            stories.add(story)
+                    stories.addAll(loadedStories.filter { !isStoryExpired(it) })
+
+                    runOnUiThread {
+                        if (stories.isEmpty()) {
+                            Toast.makeText(this@OtherUserStoryActivity, "No stories available", Toast.LENGTH_SHORT).show()
+                            finish()
+                            return@runOnUiThread
                         }
-                    }
 
-                    if (stories.isEmpty()) {
-                        Toast.makeText(this@OtherUserStoryActivity, "No stories available", Toast.LENGTH_SHORT).show()
+                        stories.sortBy { it.uploadedAt }
+                        Log.d(TAG, "Loaded ${stories.size} stories")
+                        setupProgressBars()
+                        showStory(0)
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this@OtherUserStoryActivity, "Failed to load stories", Toast.LENGTH_SHORT).show()
                         finish()
-                        return
                     }
-
-                    stories.sortBy { it.uploadedAt }
-                    Log.d(TAG, "Loaded ${stories.size} stories")
-                    setupProgressBars()
-                    showStory(0)
                 }
-
-                override fun onCancelled(error: DatabaseError) {
-                    Log.e(TAG, "Failed to load stories", error.toException())
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load stories", e)
+                runOnUiThread {
                     Toast.makeText(this@OtherUserStoryActivity, "Failed to load stories", Toast.LENGTH_SHORT).show()
                     finish()
                 }
-            })
+            }
+        }
     }
 
-    private fun isStoryExpired(story: Story): Boolean {
+    private fun isStoryExpired(story: StoryItem): Boolean {
         return System.currentTimeMillis() > story.expiresAt
     }
 

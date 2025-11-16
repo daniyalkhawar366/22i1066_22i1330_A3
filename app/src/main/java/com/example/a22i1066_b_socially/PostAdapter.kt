@@ -78,7 +78,7 @@ class PostAdapter(
         notifyDataSetChanged()
     }
 
-    fun updatePost(postId: String, newLikesCount: Long, isLiked: Boolean) {
+    fun updatePost(postId: String, newLikesCount: Int, isLiked: Boolean) {
         val index = posts.indexOfFirst { it.id == postId }
         if (index != -1) {
             posts[index].likesCount = newLikesCount

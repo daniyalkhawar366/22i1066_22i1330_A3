@@ -3,6 +3,8 @@ package com.example.a22i1066_b_socially
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageView
@@ -15,29 +17,17 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.bumptech.glide.Glide
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.google.firebase.messaging.FirebaseMessaging
-import kotlin.dec
-import kotlin.inc
-import kotlin.text.get
-import kotlin.text.set
+import com.example.a22i1066_b_socially.network.RetrofitClient
+
 
 class FYPActivity : AppCompatActivity() {
     private val TAG = "FYPActivity"
     private val auth = FirebaseAuth.getInstance()
-    private val firestore = FirebaseFirestore.getInstance()
-    private val dbRealtime = FirebaseDatabase.getInstance().reference
-    private val postsList = mutableListOf<Post>()
     private var currentUserId: String = ""
 
     private lateinit var storiesRow: LinearLayout
-    private lateinit var addStoryBtn: ImageView
+    private lateinit var cameraBtn: ImageView
     private lateinit var chatsBtn: ImageView
     private lateinit var homeBtn: ImageView
     private lateinit var exploreBtn: ImageView
@@ -47,8 +37,6 @@ class FYPActivity : AppCompatActivity() {
     private lateinit var postsRecyclerView: RecyclerView
     private lateinit var swipeRefresh: SwipeRefreshLayout
 
-    private lateinit var adapter: PostAdapter
-    private val posts = mutableListOf<Post>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,28 +81,7 @@ class FYPActivity : AppCompatActivity() {
     }
 
     private fun setupPostsAdapter() {
-        adapter = PostAdapter(
-            posts = mutableListOf(),
-            onLikeClick = { post -> toggleLike(post) },
-            onCommentClick = { post -> openComments(post) },
-            onShareClick = { post -> sharePost(post) },  // Add this
-            onProfileClick = { userId -> openProfile(userId) }
-        )
-
         postsRecyclerView.adapter = adapter
-        postsRecyclerView.layoutManager = LinearLayoutManager(this)
-    }
-    private fun openUserProfile(userId: String) {
-        if (userId == currentUserId) {
-            startActivity(Intent(this, MyProfileActivity::class.java))
-        } else {
-            val intent = Intent(this, ProfileActivity::class.java)
-            intent.putExtra("userId", userId)
-            startActivity(intent)
-        }
-    }
-
-    private fun sharePost(post: Post) {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, "Check out this post by ${post.username}!")
@@ -125,49 +92,9 @@ class FYPActivity : AppCompatActivity() {
 
 
     private fun openComments(post: Post) {
-        val intent = Intent(this, CommentsActivity::class.java)
-        intent.putExtra("postId", post.id)
-        startActivity(intent)
-    }
-
-
-    private fun toggleLike(post: Post) {
-        val postRef = FirebaseFirestore.getInstance().collection("posts").document(post.id)
-        val likeRef = postRef.collection("likes").document(currentUserId)
-
-        if (post.isLikedByCurrentUser) {
-            // Unlike
-            likeRef.delete()
-            postRef.update("likesCount", FieldValue.increment(-1))
-                .addOnSuccessListener {
-                    adapter.updatePost(post.id, post.likesCount - 1, false)
-                }
-        } else {
-            // Like
-            likeRef.set(mapOf("timestamp" to FieldValue.serverTimestamp()))
-            postRef.update("likesCount", FieldValue.increment(1))
-                .addOnSuccessListener {
-                    adapter.updatePost(post.id, post.likesCount + 1, true)
-                }
-        }
-    }
-
-
-    private fun checkIfPostsLiked() {
-        postsList.forEach { post ->
-            firestore.collection("posts").document(post.id)
-                .collection("likes").document(currentUserId)
-                .get()
-                .addOnSuccessListener { doc ->
-                    post.isLikedByCurrentUser = doc.exists()
-                    adapter.notifyDataSetChanged()
-                }
-        }
-    }
-
     private fun initializeViews() {
         storiesRow = findViewById(R.id.storiesRow)
-        addStoryBtn = findViewById(R.id.addstory)
+        cameraBtn = findViewById(R.id.cameraBtn)
         chatsBtn = findViewById(R.id.chats)
         homeBtn = findViewById(R.id.homebtn)
         exploreBtn = findViewById(R.id.explorepg)
@@ -177,19 +104,13 @@ class FYPActivity : AppCompatActivity() {
         postsRecyclerView = findViewById(R.id.postsRecyclerView)
         swipeRefresh = findViewById(R.id.swipeRefresh)
     }
-    private fun handleShare(post: Post) {
-        val intent = Intent(this, SharePostActivity::class.java)
-        intent.putExtra("postId", post.id)
-        startActivity(intent)
-    }
-
 
     private fun setupRecyclerView() {
         adapter = PostAdapter(
             posts = posts,
             onLikeClick = { post -> handleLike(post) },
             onCommentClick = { post -> handleComment(post) },
-            onShareClick = { post -> handleShare(post) },
+            onShareClick = { post -> sharePost(post) },
             onProfileClick = { userId -> openProfile(userId) }
         )
         postsRecyclerView.layoutManager = LinearLayoutManager(this)
@@ -210,7 +131,7 @@ class FYPActivity : AppCompatActivity() {
     }
 
     private fun setupBottomNavigation() {
-        addStoryBtn.setOnClickListener {
+        cameraBtn.setOnClickListener {
             startActivity(Intent(this, AddStoryActivity::class.java))
         }
 
@@ -240,153 +161,127 @@ class FYPActivity : AppCompatActivity() {
     }
 
     private fun loadCurrentUserProfile() {
-        val uid = auth.currentUser?.uid ?: return
-        firestore.collection("users").document(uid).get()
-            .addOnSuccessListener { doc ->
-                if (doc.exists()) {
-                    val profilePicUrl = doc.getString("profilePicUrl")
-                        ?: doc.getString("profilePic")
-                        ?: doc.getString("photoUrl")
-                        ?: ""
+        val userId = auth.currentUser?.uid ?: return
 
-                    if (profilePicUrl.isNotBlank()) {
-                        Glide.with(this)
-                            .load(profilePicUrl)
-                            .circleCrop()
-                            .placeholder(R.drawable.profileicon)
-                            .error(R.drawable.profileicon)
-                            .into(profileBtn)
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserProfile("profile", userId)
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val userProfileResponse = response.body()
+                    if (userProfileResponse?.success == true && userProfileResponse.user != null) {
+                        val profilePic = userProfileResponse.user.profilePicUrl
+                        runOnUiThread {
+                            // Load profile pic in bottom navigation
+                            if (!profilePic.isNullOrBlank()) {
+                                Glide.with(this@FYPActivity)
+                                    .load(profilePic)
+                                    .circleCrop()
+                                    .placeholder(R.drawable.profile_pic)
+                                    .error(R.drawable.profile_pic)
+                                    .into(profileBtn)
+                            } else {
+                                profileBtn.setImageResource(R.drawable.profile_pic)
+                            }
+                        }
                     } else {
-                        profileBtn.setImageResource(R.drawable.profileicon)
+                        val errorMsg = userProfileResponse?.error ?: "Failed to load profile"
+                        Log.e(TAG, errorMsg)
                     }
+                } else {
+                    Log.e(TAG, "Failed to load profile: ${response.message()}")
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading profile", e)
             }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to load profile: ${e.message}")
-                profileBtn.setImageResource(R.drawable.profileicon)
-            }
+        }
     }
+
+
 
 
     private fun loadPosts(shuffle: Boolean = false) {
-        FirebaseFirestore.getInstance().collection("posts")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .get()
-            .addOnSuccessListener { snapshot ->
-                postsList.clear()
-                val postsToCheck = mutableListOf<Post>()
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@FYPActivity).getAuthToken()}"
+                val response = RetrofitClient.instance.getPostsFeed(token)
 
-                for (doc in snapshot.documents) {
-                    val post = Post(
-                        id = doc.id,
-                        userId = doc.getString("userId") ?: "",
-                        username = doc.getString("username") ?: "",
-                        profilePicUrl = doc.getString("profilePicUrl") ?: "",
-                        imageUrls = doc.get("imageUrls") as? List<String> ?: emptyList(),
-                        caption = doc.getString("caption") ?: "",
-                        timestamp = doc.getTimestamp("timestamp"),
-                        likesCount = doc.getLong("likesCount") ?: 0L,
-                        commentsCount = doc.getLong("commentsCount") ?: 0L
-                    )
-                    postsToCheck.add(post)
-                }
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val postsData = response.body()?.posts ?: emptyList()
 
-                // Check like status for all posts
-                var checkedCount = 0
-                postsToCheck.forEach { post ->
-                    checkIfLiked(post.id) { isLiked ->
-                        post.isLikedByCurrentUser = isLiked
-                        checkedCount++
+                    posts.clear()
+                    postsData.forEach { postItem ->
+                        posts.add(Post(
+                            id = postItem.id,
+                            userId = postItem.userId,
+                            username = postItem.username,
+                            profilePicUrl = postItem.profilePicUrl,
+                            imageUrls = postItem.imageUrls,
+                            caption = postItem.caption,
+                            timestamp = postItem.timestamp,
+                            likesCount = postItem.likesCount,
+                            commentsCount = postItem.commentsCount,
+                            isLikedByCurrentUser = postItem.isLikedByCurrentUser
+                        ))
+                    }
 
-                        if (checkedCount == postsToCheck.size) {
-                            postsList.addAll(postsToCheck)
-                            if (shuffle) postsList.shuffle()
-                            adapter.updatePosts(postsList)
-                            swipeRefresh.isRefreshing = false
-                        }
+                    if (shuffle) posts.shuffle()
+
+                    runOnUiThread {
+                        adapter.updatePosts(posts)
+                        swipeRefresh.isRefreshing = false
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this@FYPActivity, "Failed to load posts", Toast.LENGTH_SHORT).show()
+                        swipeRefresh.isRefreshing = false
                     }
                 }
-
-                if (postsToCheck.isEmpty()) {
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading posts", e)
+                runOnUiThread {
+                    Toast.makeText(this@FYPActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                     swipeRefresh.isRefreshing = false
                 }
             }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to load posts", e)
-                swipeRefresh.isRefreshing = false
-            }
-    }
-
-    private fun checkIfLiked(postId: String, callback: (Boolean) -> Unit) {
-        FirebaseFirestore.getInstance()
-            .collection("posts").document(postId)
-            .collection("likes").document(currentUserId)
-            .get()
-            .addOnSuccessListener { doc ->
-                callback(doc.exists())
-            }
-            .addOnFailureListener {
-                callback(false)
-            }
+        }
     }
 
 
 
     private fun handleLike(post: Post) {
-        val postRef = firestore.collection("posts").document(post.id)
-        val likeRef = postRef.collection("likes").document(currentUserId)
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@FYPActivity).getAuthToken()}"
+                val response = RetrofitClient.instance.togglePostLike(
+                    token,
+                    com.example.a22i1066_b_socially.network.ToggleLikeRequest(post.id)
+                )
 
-        val index = posts.indexOfFirst { it.id == post.id }
-        if (index == -1) return
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val isLiked = response.body()?.isLiked ?: false
+                    val likesCount = response.body()?.likesCount ?: 0
 
-        val wasLiked = post.isLikedByCurrentUser
-
-        if (wasLiked) {
-            // Unlike
-            likeRef.delete()
-                .addOnSuccessListener {
-                    postRef.update("likesCount", FieldValue.increment(-1))
-                        .addOnSuccessListener {
-                            // Reload the post to get accurate count
-                            reloadPost(post.id)
+                    runOnUiThread {
+                        val index = posts.indexOfFirst { it.id == post.id }
+                        if (index != -1) {
+                            posts[index].isLikedByCurrentUser = isLiked
+                            posts[index].likesCount = likesCount
+                            adapter.notifyItemChanged(index)
                         }
-                }
-                .addOnFailureListener { e ->
-                    Log.e(TAG, "Failed to unlike", e)
-                    Toast.makeText(this, "Failed to unlike", Toast.LENGTH_SHORT).show()
-                }
-        } else {
-            // Like
-            likeRef.set(mapOf("timestamp" to FieldValue.serverTimestamp()))
-                .addOnSuccessListener {
-                    postRef.update("likesCount", FieldValue.increment(1))
-                        .addOnSuccessListener {
-                            // Reload the post to get accurate count
-                            reloadPost(post.id)
-                        }
-                }
-                .addOnFailureListener { e ->
-                    Log.e(TAG, "Failed to like", e)
-                    Toast.makeText(this, "Failed to like", Toast.LENGTH_SHORT).show()
-                }
-        }
-    }
-
-    private fun reloadPost(postId: String) {
-        firestore.collection("posts").document(postId)
-            .get()
-            .addOnSuccessListener { doc ->
-                val index = posts.indexOfFirst { it.id == postId }
-                if (index != -1 && doc.exists()) {
-                    val updatedLikesCount = doc.getLong("likesCount") ?: 0L
-
-                    checkIfLiked(postId) { isLiked ->
-                        posts[index].likesCount = updatedLikesCount
-                        posts[index].isLikedByCurrentUser = isLiked
-                        adapter.notifyItemChanged(index)
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this@FYPActivity, "Failed to update like", Toast.LENGTH_SHORT).show()
                     }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error toggling like", e)
+                runOnUiThread {
+                    Toast.makeText(this@FYPActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
+        }
     }
 
 
@@ -410,30 +305,27 @@ class FYPActivity : AppCompatActivity() {
     }
 
     private fun fetchAndDisplayStories() {
-        val currentUserId = auth.currentUser?.uid ?: return
-        val storiesRef = dbRealtime.child("stories")
-        val now = System.currentTimeMillis()
-
         storiesRow.removeAllViews()
 
-        addCurrentUserStory(currentUserId, now)
+        // Add current user's story first
+        addCurrentUserStory()
 
-        storiesRef.addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                for (userSnapshot in snapshot.children) {
-                    val userId = userSnapshot.key ?: continue
-                    if (userId == currentUserId) continue
+        // Load all active stories from backend
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@FYPActivity).getAuthToken()}"
+                val response = RetrofitClient.instance.getActiveStories(token)
 
-                    val hasActiveStory = userSnapshot.children.any { storySnapshot ->
-                        val story = storySnapshot.getValue(Story::class.java)
-                        story != null && story.expiresAt > now
-                    }
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val stories = response.body()?.stories ?: emptyList()
 
-                    if (hasActiveStory) {
-                        firestore.collection("users").document(userId).get()
-                            .addOnSuccessListener { doc ->
-                                val username = doc?.getString("username") ?: "User"
-                                val profilePicUrl = doc?.getString("profilePicUrl").orEmpty()
+                    // Group stories by userId to show one circle per user
+                    val storiesByUser = stories.groupBy { it.userId }
+
+                    runOnUiThread {
+                        storiesByUser.forEach { (userId, userStories) ->
+                            if (userId != currentUserId) {
+                                val story = userStories.first() // Take first story for the user
 
                                 val storyView = LayoutInflater.from(this@FYPActivity)
                                     .inflate(R.layout.story_item, storiesRow, false)
@@ -443,11 +335,11 @@ class FYPActivity : AppCompatActivity() {
                                 val storyUsername = storyView.findViewById<TextView>(R.id.storyUsername)
                                 val addIcon = storyView.findViewById<ImageView>(R.id.addStoryIcon)
 
-                                storyUsername.text = username
+                                storyUsername.text = story.username
 
-                                if (profilePicUrl.isNotBlank()) {
+                                if (story.profilePicUrl.isNotBlank()) {
                                     Glide.with(this@FYPActivity)
-                                        .load(profilePicUrl)
+                                        .load(story.profilePicUrl)
                                         .circleCrop()
                                         .into(storyImage)
                                 } else {
@@ -465,31 +357,35 @@ class FYPActivity : AppCompatActivity() {
 
                                 storiesRow.addView(storyView)
                             }
+                        }
                     }
+                } else {
+                    Log.e(TAG, "Failed to load stories: ${response.body()?.error}")
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading stories", e)
             }
-
-            override fun onCancelled(error: DatabaseError) {
-                Log.e(TAG, "Failed to load stories", error.toException())
-            }
-        })
+        }
     }
 
-    private fun addCurrentUserStory(userId: String, now: Long) {
-        val storiesRef = dbRealtime.child("stories").child(userId)
+    private fun addCurrentUserStory() {
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@FYPActivity).getAuthToken()}"
 
-        storiesRef.addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val hasActiveStory = snapshot.children.any { storySnapshot ->
-                    val story = storySnapshot.getValue(Story::class.java)
-                    story != null && story.expiresAt > now
-                }
+                // Get current user's profile
+                val profileResponse = RetrofitClient.instance.getUserProfile("profile", currentUserId)
 
-                firestore.collection("users").document(userId).get()
-                    .addOnSuccessListener { doc ->
-                        val username = doc?.getString("username") ?: "Your Story"
-                        val profilePicUrl = doc?.getString("profilePicUrl").orEmpty()
+                // Get current user's stories
+                val storiesResponse = RetrofitClient.instance.getUserStories(token, currentUserId)
 
+                if (profileResponse.isSuccessful && profileResponse.body()?.success == true) {
+                    val user = profileResponse.body()?.user
+                    val hasActiveStory = storiesResponse.isSuccessful &&
+                                        storiesResponse.body()?.success == true &&
+                                        !storiesResponse.body()?.stories.isNullOrEmpty()
+
+                    runOnUiThread {
                         val storyView = LayoutInflater.from(this@FYPActivity)
                             .inflate(R.layout.story_item, storiesRow, false)
 
@@ -498,12 +394,15 @@ class FYPActivity : AppCompatActivity() {
                         val storyUsername = storyView.findViewById<TextView>(R.id.storyUsername)
                         val addIcon = storyView.findViewById<ImageView>(R.id.addStoryIcon)
 
-                        storyUsername.text = username
+                        storyUsername.text = "Your Story"
 
+                        val profilePicUrl = user?.profilePicUrl ?: ""
                         if (profilePicUrl.isNotBlank()) {
                             Glide.with(this@FYPActivity)
                                 .load(profilePicUrl)
                                 .circleCrop()
+                                .placeholder(R.drawable.profile_pic)
+                                .error(R.drawable.profile_pic)
                                 .into(storyImage)
                         } else {
                             storyImage.setImageResource(R.drawable.profile_pic)
@@ -527,12 +426,13 @@ class FYPActivity : AppCompatActivity() {
 
                         storiesRow.addView(storyView, 0)
                     }
+                } else {
+                    Log.e(TAG, "Failed to load user profile for story")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading current user story", e)
             }
-
-            override fun onCancelled(error: DatabaseError) {
-                Log.e(TAG, "Failed to check current user's stories", error.toException())
-            }
-        })
+        }
     }
 
     override fun onResume() {

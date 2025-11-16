@@ -1,6 +1,5 @@
 package com.example.a22i1066_b_socially.network
 
-import com.google.gson.GsonBuilder
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -14,22 +13,34 @@ object RetrofitClient {
         level = HttpLoggingInterceptor.Level.BODY
     }
 
-    private val client = OkHttpClient.Builder()
+    private val okHttpClient = OkHttpClient.Builder()
+        .addInterceptor { chain ->
+            val request = chain.request()
+            val response = chain.proceed(request)
+
+            // Log raw response body
+            val responseBody = response.body
+            val source = responseBody?.source()
+            source?.request(Long.MAX_VALUE)
+            val buffer = source?.buffer
+
+            val bodyString = buffer?.clone()?.readUtf8() ?: ""
+            android.util.Log.d("OkHttp", "Raw Response: $bodyString")
+
+            response
+        }
         .addInterceptor(loggingInterceptor)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    private val gson = GsonBuilder()
-        .setLenient()
-        .create()
 
     val instance: ApiService by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)
-            .client(client)
-            .addConverterFactory(GsonConverterFactory.create(gson))
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(ApiService::class.java)
     }

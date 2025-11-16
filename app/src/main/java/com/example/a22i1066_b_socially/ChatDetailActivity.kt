@@ -1,8 +1,6 @@
 package com.example.a22i1066_b_socially
 
 import android.Manifest
-import android.app.Activity
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.net.Uri
@@ -21,27 +19,28 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.DocumentChange
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
-import com.google.firebase.firestore.Query
+import com.example.a22i1066_b_socially.network.RetrofitClient
+import com.example.a22i1066_b_socially.network.SendMessageRequest
+import com.example.a22i1066_b_socially.network.EditMessageRequest
+import com.example.a22i1066_b_socially.network.DeleteMessageRequest
+import com.example.a22i1066_b_socially.SessionManager
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
+import kotlin.text.clear
 
 class ChatDetailActivity : AppCompatActivity() {
 
     private val TAG = "ChatDetailActivity"
-    private val db = FirebaseFirestore.getInstance()
-    private val auth = FirebaseAuth.getInstance()
     private var screenshotObserver: ContentObserver? = null
     private var lastScreenshotTime = 0L
 
@@ -59,10 +58,10 @@ class ChatDetailActivity : AppCompatActivity() {
     private lateinit var micIcon: ImageView
     private lateinit var galleryIcon: ImageView
     private lateinit var stickerIcon: ImageView
+    private lateinit var sessionManager: SessionManager
 
     private val messages = mutableListOf<Message>()
     private lateinit var adapter: MessageAdapter
-    private var messagesListener: ListenerRegistration? = null
 
     private var receiverUserId: String = ""
     private var receiverUsername: String = ""
@@ -77,6 +76,7 @@ class ChatDetailActivity : AppCompatActivity() {
     private val MAX_IMAGES = 10
     private val client = OkHttpClient()
     private var isUploadingImages = false
+    private var isPolling = false
 
     private val CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dihbswob7/image/upload"
     private val UPLOAD_PRESET = "mobile_unsigned_preset"
@@ -97,6 +97,8 @@ class ChatDetailActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat_detail)
 
+        sessionManager = SessionManager(this)
+
         backButton = findViewById(R.id.backButton)
         profileImage = findViewById(R.id.profileImage)
         usernameText = findViewById(R.id.usernameText)
@@ -116,8 +118,7 @@ class ChatDetailActivity : AppCompatActivity() {
         receiverUsername = intent.getStringExtra("receiverUsername") ?: ""
         receiverProfileUrl = intent.getStringExtra("RECEIVER_PROFILE_URL")
 
-        currentUserId = intent.getStringExtra("CURRENT_USER_ID")?.takeIf { it.isNotBlank() }
-            ?: auth.currentUser?.uid ?: ""
+        currentUserId = sessionManager.getUserId() ?: ""
 
         if (currentUserId.isBlank()) {
             Toast.makeText(this, "User not authenticated", Toast.LENGTH_SHORT).show()
@@ -163,8 +164,70 @@ class ChatDetailActivity : AppCompatActivity() {
         micIcon.setOnClickListener { Toast.makeText(this, "Mic tapped", Toast.LENGTH_SHORT).show() }
 
         startScreenshotDetection()
-        listenMessages()
+        loadMessages()
+        startPolling()
     }
+
+    override fun onPause() {
+        super.onPause()
+        isPolling = false
+    }
+
+    private fun startPolling() {
+        isPolling = true
+        lifecycleScope.launch {
+            while (isPolling) {
+                delay(2000) // Poll every 2 seconds
+                loadMessages(silent = true)
+            }
+        }
+    }
+
+    private fun loadMessages(silent: Boolean = false) {
+        val token = sessionManager.getToken()
+        if (token.isNullOrBlank() || chatId.isBlank()) return
+
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getMessages(
+                    "Bearer $token",
+                    chatId,
+                    limit = 50
+                )
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val messageItems = response.body()?.messages ?: emptyList<com.example.a22i1066_b_socially.network.MessageItem>()
+
+                    messages.clear()
+                    messageItems.forEach { msg: com.example.a22i1066_b_socially.network.MessageItem ->
+                        messages.add(
+                            Message(
+                                id = msg.id,
+                                text = msg.text,
+                                senderId = msg.senderId,
+                                timestamp = msg.timestamp,
+                                imageUrls = msg.imageUrls,
+                                type = msg.type
+                            )
+                        )
+                    }
+
+                    runOnUiThread {
+                        adapter.notifyDataSetChanged()
+                        messageRecyclerView.scrollToPosition(messages.size - 1)
+                    }
+                } else if (!silent) {
+                    Toast.makeText(this@ChatDetailActivity, "Failed to load messages", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading messages", e)
+                if (!silent) {
+                    Toast.makeText(this@ChatDetailActivity, "Network error", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
 
     private fun openImagePicker() {
         imagePickerLauncher.launch("image/*")
@@ -265,42 +328,30 @@ class ChatDetailActivity : AppCompatActivity() {
 
     private fun sendImageMessage(imageUrls: List<String>) {
         val text = messageInput.text.toString().trim()
-        val authUid = auth.currentUser?.uid
+        val token = sessionManager.getToken() ?: return
 
-        if (authUid.isNullOrBlank()) {
-            Toast.makeText(this, "Not authenticated", Toast.LENGTH_SHORT).show()
-            return
-        }
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.sendMessage(
+                    token = "Bearer $token",
+                    request = SendMessageRequest(
+                        receiverId = receiverUserId,
+                        text = text,
+                        imageUrls = imageUrls
+                    )
+                )
 
-        val colRef = db.collection("chats").document(chatId).collection("messages")
-        val docRef = colRef.document()
-
-        val messageType = when {
-            imageUrls.isNotEmpty() && text.isNotEmpty() -> "mixed"
-            imageUrls.isNotEmpty() -> "image"
-            else -> "text"
-        }
-
-        val payload = mutableMapOf<String, Any>(
-            "senderId" to currentUserId,
-            "text" to text,
-            "timestamp" to FieldValue.serverTimestamp(),
-            "type" to messageType
-        )
-
-        if (imageUrls.isNotEmpty()) {
-            payload["imageUrls"] = imageUrls
-        }
-
-        docRef.set(payload)
-            .addOnSuccessListener {
-                messageInput.setText("")
-                Toast.makeText(this, "Message sent", Toast.LENGTH_SHORT).show()
+                if (response.isSuccessful && response.body()?.success == true) {
+                    messageInput.setText("")
+                    loadMessages()
+                } else {
+                    Toast.makeText(this@ChatDetailActivity, "Failed to send", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending image message", e)
+                Toast.makeText(this@ChatDetailActivity, "Network error", Toast.LENGTH_SHORT).show()
             }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to send message", e)
-                Toast.makeText(this, "Failed to send", Toast.LENGTH_SHORT).show()
-            }
+        }
     }
 
     private fun startScreenshotDetection() {
@@ -329,93 +380,7 @@ class ChatDetailActivity : AppCompatActivity() {
 
     private fun onScreenshotDetected() {
         Log.d(TAG, "Screenshot detected in chat: $chatId")
-
-        val requestData = mapOf(
-            "type" to "screenshot",
-            "senderId" to currentUserId,
-            "receiverId" to receiverUserId,
-            "chatId" to chatId,
-            "timestamp" to FieldValue.serverTimestamp()
-        )
-
-        db.collection("notification_requests")
-            .add(requestData)
-            .addOnSuccessListener {
-                Log.d(TAG, "Screenshot notification queued")
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to queue screenshot notification", e)
-            }
-    }
-
-    private fun listenMessages() {
-        messagesListener?.remove()
-        messages.clear()
-        adapter.notifyDataSetChanged()
-
-        val colRef = db.collection("chats").document(chatId).collection("messages")
-        messagesListener = colRef.orderBy("timestamp", Query.Direction.ASCENDING)
-            .addSnapshotListener { snap, err ->
-                if (err != null) {
-                    Log.e(TAG, "Listen failed", err)
-                    return@addSnapshotListener
-                }
-                if (snap == null) return@addSnapshotListener
-
-                for (dc in snap.documentChanges) {
-                    val doc = dc.document
-                    val id = doc.id
-                    val senderId = doc.getString("senderId") ?: ""
-                    val text = doc.getString("text") ?: ""
-                    val type = doc.getString("type") ?: "text"
-
-                    // Parse imageUrls array safely
-                    val imageUrls = try {
-                        @Suppress("UNCHECKED_CAST")
-                        (doc.get("imageUrls") as? List<String>) ?: emptyList()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to parse imageUrls for message $id", e)
-                        emptyList<String>()
-                    }
-
-                    val ts = doc.getTimestamp("timestamp")
-                    val tsMillis = ts?.toDate()?.time ?: System.currentTimeMillis()
-
-                    val message = Message(
-                        id = id,
-                        text = text,
-                        senderId = senderId,
-                        timestamp = tsMillis,
-                        imageUrls = imageUrls,
-                        type = type
-                    )
-
-                    when (dc.type) {
-                        DocumentChange.Type.ADDED -> {
-                            val idx = messages.indexOfFirst { it.id == id }
-                            if (idx == -1) {
-                                messages.add(message)
-                                adapter.notifyItemInserted(messages.size - 1)
-                                messageRecyclerView.scrollToPosition(messages.size - 1)
-                            }
-                        }
-                        DocumentChange.Type.MODIFIED -> {
-                            val idx = messages.indexOfFirst { it.id == id }
-                            if (idx != -1) {
-                                messages[idx] = message
-                                adapter.notifyItemChanged(idx)
-                            }
-                        }
-                        DocumentChange.Type.REMOVED -> {
-                            val idx = messages.indexOfFirst { it.id == id }
-                            if (idx != -1) {
-                                messages.removeAt(idx)
-                                adapter.notifyItemRemoved(idx)
-                            }
-                        }
-                    }
-                }
-            }
+        Toast.makeText(this, "Screenshot detected", Toast.LENGTH_SHORT).show()
     }
 
     private fun editMessage(message: Message) {
@@ -431,16 +396,29 @@ class ChatDetailActivity : AppCompatActivity() {
             .setPositiveButton("Save") { _, _ ->
                 val newText = editText.text.toString().trim()
                 if (newText.isNotEmpty()) {
-                    db.collection("chats").document(chatId).collection("messages")
-                        .document(message.id)
-                        .update("text", newText)
-                        .addOnSuccessListener {
-                            Toast.makeText(this, "Message updated", Toast.LENGTH_SHORT).show()
+                    val token = sessionManager.getToken() ?: return@setPositiveButton
+
+                    lifecycleScope.launch {
+                        try {
+                            val response = RetrofitClient.instance.editMessage(
+                                token = "Bearer $token",
+                                request = EditMessageRequest(
+                                    messageId = message.id,
+                                    text = newText
+                                )
+                            )
+
+                            if (response.isSuccessful && response.body()?.success == true) {
+                                Toast.makeText(this@ChatDetailActivity, "Message updated", Toast.LENGTH_SHORT).show()
+                                loadMessages()
+                            } else {
+                                Toast.makeText(this@ChatDetailActivity, "Failed to update", Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error editing message", e)
+                            Toast.makeText(this@ChatDetailActivity, "Network error", Toast.LENGTH_SHORT).show()
                         }
-                        .addOnFailureListener { e ->
-                            Log.e(TAG, "Failed to update message", e)
-                            Toast.makeText(this, "Failed to update", Toast.LENGTH_SHORT).show()
-                        }
+                    }
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -452,16 +430,26 @@ class ChatDetailActivity : AppCompatActivity() {
             .setTitle("Delete Message")
             .setMessage("Are you sure you want to delete this message?")
             .setPositiveButton("Delete") { _, _ ->
-                db.collection("chats").document(chatId).collection("messages")
-                    .document(message.id)
-                    .delete()
-                    .addOnSuccessListener {
-                        Toast.makeText(this, "Message deleted", Toast.LENGTH_SHORT).show()
+                val token = sessionManager.getToken() ?: return@setPositiveButton
+
+                lifecycleScope.launch {
+                    try {
+                        val response = RetrofitClient.instance.deleteMessage(
+                            token = "Bearer $token",
+                            request = DeleteMessageRequest(messageId = message.id)
+                        )
+
+                        if (response.isSuccessful && response.body()?.success == true) {
+                            Toast.makeText(this@ChatDetailActivity, "Message deleted", Toast.LENGTH_SHORT).show()
+                            loadMessages()
+                        } else {
+                            Toast.makeText(this@ChatDetailActivity, "Failed to delete", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error deleting message", e)
+                        Toast.makeText(this@ChatDetailActivity, "Network error", Toast.LENGTH_SHORT).show()
                     }
-                    .addOnFailureListener { e ->
-                        Log.e(TAG, "Failed to delete message", e)
-                        Toast.makeText(this, "Failed to delete", Toast.LENGTH_SHORT).show()
-                    }
+                }
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -471,43 +459,34 @@ class ChatDetailActivity : AppCompatActivity() {
         val text = messageInput.text.toString().trim()
         if (text.isEmpty()) return
 
-        if (currentUserId.isBlank()) {
-            Toast.makeText(this, "User not authenticated", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (receiverUserId.isBlank()) {
-            Toast.makeText(this, "Receiver not specified", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val authUid = auth.currentUser?.uid
-        if (authUid.isNullOrBlank()) {
-            Toast.makeText(this, "Not authenticated", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val colRef = db.collection("chats").document(chatId).collection("messages")
-        val docRef = colRef.document()
-
-        val payload = mapOf(
-            "senderId" to currentUserId,
-            "text" to text,
-            "timestamp" to FieldValue.serverTimestamp(),
-            "type" to "text"
-        )
+        val token = sessionManager.getToken() ?: return
 
         sendButton.isEnabled = false
 
-        docRef.set(payload)
-            .addOnSuccessListener {
-                messageInput.setText("")
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.sendMessage(
+                    token = "Bearer $token",
+                    request = SendMessageRequest(
+                        receiverId = receiverUserId,
+                        text = text,
+                        imageUrls = emptyList()
+                    )
+                )
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    messageInput.setText("")
+                    loadMessages()
+                } else {
+                    Toast.makeText(this@ChatDetailActivity, "Failed to send", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending message", e)
+                Toast.makeText(this@ChatDetailActivity, "Network error", Toast.LENGTH_SHORT).show()
+            } finally {
                 sendButton.isEnabled = true
             }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to send message", e)
-                Toast.makeText(this, "Failed to send", Toast.LENGTH_SHORT).show()
-                sendButton.isEnabled = true
-            }
+        }
     }
 
     private fun hasPermission(perm: String) =
@@ -540,18 +519,17 @@ class ChatDetailActivity : AppCompatActivity() {
         CallSession.start(requestedChatId, callTypeStr)
 
         val intent = if (isVideo) {
-            Intent(this, VideoCallActivity::class.java)
+            android.content.Intent(this, VideoCallActivity::class.java)
         } else {
-            Intent(this, CallActivity::class.java)
+            android.content.Intent(this, CallActivity::class.java)
+        }.apply {
+            putExtra("CHAT_ID", requestedChatId ?: "")
+            putExtra("RECEIVER_USER_ID", receiverUserId)
+            putExtra("RECEIVER_USERNAME", receiverUsername)
+            putExtra("RECEIVER_PROFILE_URL", receiverProfileUrl)
+            putExtra("CURRENT_USER_ID", currentUserId)
+            putExtra("CALL_TYPE", callTypeStr)
         }
-
-        // Pass all required data dynamically
-        intent.putExtra("CHAT_ID", requestedChatId ?: "")
-        intent.putExtra("RECEIVER_USER_ID", receiverUserId)
-        intent.putExtra("RECEIVER_USERNAME", receiverUsername)
-        intent.putExtra("RECEIVER_PROFILE_URL", receiverProfileUrl)
-        intent.putExtra("CURRENT_USER_ID", currentUserId)
-        intent.putExtra("CALL_TYPE", callTypeStr)
 
         startActivity(intent)
     }
@@ -579,7 +557,6 @@ class ChatDetailActivity : AppCompatActivity() {
                 Log.e(TAG, "Failed to unregister observer", e)
             }
         }
-        messagesListener?.remove()
-        messagesListener = null
+        isPolling = false
     }
 }

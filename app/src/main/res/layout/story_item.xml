@@ -12,12 +12,12 @@
         android:layout_width="70dp"
         android:layout_height="70dp">
 
-        <!-- Ring background (gradient border) -->
+        <!-- Ring background (Instagram-style gradient border) -->
         <View
             android:id="@+id/storyRing"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="@drawable/ring_gradient"
+            android:background="@drawable/instagram_story_ring"
             android:visibility="gone"/>
 
         <!-- Profile Image -->
@@ -31,16 +31,15 @@
             android:background="@drawable/circle_white_bg"
             android:clipToOutline="true"/>
 
-        <!-- Add icon (bottom-right) -->
+        <!-- Add icon (bottom-right) - Borderless with custom color -->
         <ImageView
             android:id="@+id/addStoryIcon"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
             android:layout_gravity="bottom|end"
-            android:src="@drawable/ic_add"
-            android:background="@drawable/add_icon_bg"
-            android:visibility="gone"
-            android:padding="4dp"/>
+            android:src="@drawable/ic_add_circle"
+            android:tint="#8B5A5A"
+            android:visibility="gone"/>
     </FrameLayout>
 
     <!-- Username Text -->

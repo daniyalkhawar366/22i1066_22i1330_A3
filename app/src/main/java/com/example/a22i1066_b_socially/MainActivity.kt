@@ -18,6 +18,18 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Check if user is already logged in
+        val sessionManager = SessionManager(this)
+        if (sessionManager.isLoggedIn()) {
+            // Navigate directly to FYP
+            val intent = Intent(this, FYPActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            startActivity(intent)
+            finish()
+            return
+        }
+
         // Attach your mainpage.xml layout
         setContentView(R.layout.mainpage)
 

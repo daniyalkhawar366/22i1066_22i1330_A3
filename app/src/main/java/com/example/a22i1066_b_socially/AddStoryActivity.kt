@@ -1,6 +1,8 @@
 package com.example.a22i1066_b_socially
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
@@ -9,6 +11,7 @@ import android.widget.ImageView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.bumptech.glide.Glide
 import java.io.File
 import java.io.FileOutputStream
@@ -16,6 +19,17 @@ import java.io.FileOutputStream
 class AddStoryActivity : AppCompatActivity() {
 
     private val TAG = "AddStoryActivity"
+
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            // Permission granted, open camera
+            cameraLauncher.launch(null)
+        } else {
+            Toast.makeText(this, "Camera permission is required to take photos", Toast.LENGTH_LONG).show()
+        }
+    }
 
     private lateinit var btnPickImage: ImageView
     private lateinit var btnCenter: ImageView
@@ -43,13 +57,17 @@ class AddStoryActivity : AppCompatActivity() {
             Toast.makeText(this, "Camera capture failed", Toast.LENGTH_SHORT).show()
             return@registerForActivityResult
         }
+
+        // Save bitmap to cache file
         val uri = saveBitmapToCacheFile(bmp)
         if (uri == null) {
             Toast.makeText(this, "Failed to save photo", Toast.LENGTH_SHORT).show()
             return@registerForActivityResult
         }
+
+        // Set as selected and navigate
         selectedUri = uri
-        // Go directly to upload screen with this image
+        Log.d(TAG, "Camera photo saved to: $uri")
         navigateToUpload(uri)
     }
 
@@ -74,13 +92,29 @@ class AddStoryActivity : AppCompatActivity() {
             if (uri != null) {
                 navigateToUpload(uri)
             } else {
-                // take picture then forward
-                cameraLauncher.launch(null)
+                // Check camera permission before launching camera
+                checkCameraPermissionAndLaunch()
             }
         }
 
         ivBack.setOnClickListener {
             finish()
+        }
+    }
+
+    private fun checkCameraPermissionAndLaunch() {
+        when {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                // Permission already granted, launch camera
+                cameraLauncher.launch(null)
+            }
+            else -> {
+                // Request permission
+                requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
         }
     }
 
@@ -90,11 +124,10 @@ class AddStoryActivity : AppCompatActivity() {
                 putExtra("imageUri", uri.toString())
             }
             startActivity(intent)
+            finish() // Close AddStoryActivity after starting upload screen
         } catch (e: Exception) {
             Log.e(TAG, "Failed to open UploadStoryActivity", e)
             Toast.makeText(this, "Failed to open upload screen", Toast.LENGTH_SHORT).show()
-        } finally {
-            finish()
         }
     }
 

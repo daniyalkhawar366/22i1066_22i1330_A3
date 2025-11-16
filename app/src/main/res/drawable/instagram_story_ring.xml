@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Outer gradient ring -->
+    <item>
+        <shape android:shape="oval">
+            <gradient
+                android:type="sweep"
+                android:startColor="#FEDA75"
+                android:centerColor="#FA7E1E"
+                android:endColor="#D62976"/>
+            <size
+                android:width="70dp"
+                android:height="70dp"/>
+        </shape>
+    </item>
+    <!-- Inner white circle to create ring effect -->
+    <item
+        android:top="3dp"
+        android:bottom="3dp"
+        android:left="3dp"
+        android:right="3dp">
+        <shape android:shape="oval">
+            <solid android:color="#FFFFFF"/>
+        </shape>
+    </item>
+</layer-list>
+

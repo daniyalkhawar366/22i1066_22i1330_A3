@@ -8,7 +8,6 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
-import com.example.a22i1066_b_socially.network.LoginRequest
 import com.example.a22i1066_b_socially.network.RetrofitClient
 import kotlinx.coroutines.launch
 import kotlin.or
