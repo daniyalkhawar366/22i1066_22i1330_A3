@@ -13,13 +13,11 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.a22i1066_b_socially.network.RetrofitClient
-import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 
 class CommentsActivity : AppCompatActivity() {
 
     private val TAG = "CommentsActivity"
-    private val auth = FirebaseAuth.getInstance()
 
     private lateinit var backBtn: ImageView
     private lateinit var postBtn: TextView
@@ -63,7 +61,7 @@ class CommentsActivity : AppCompatActivity() {
 
     private fun setupRecyclerView() {
         adapter = CommentsAdapter(comments, currentUserId) { comment ->
-            deleteComment(comment)
+            // Comment deletion not yet implemented
         }
         commentsRecyclerView.adapter = adapter
         commentsRecyclerView.layoutManager = LinearLayoutManager(this)
@@ -162,21 +160,4 @@ class CommentsActivity : AppCompatActivity() {
         }
     }
 
-    private fun deleteComment(comment: Comment) {
-        if (comment.userId != currentUserId) return
-
-        db.collection("posts").document(postId)
-            .collection("comments")
-            .document(comment.commentId)
-            .delete()
-            .addOnSuccessListener {
-                db.collection("posts").document(postId)
-                    .update("commentsCount", FieldValue.increment(-1))
-                Toast.makeText(this, "Comment deleted", Toast.LENGTH_SHORT).show()
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Error deleting comment", e)
-                Toast.makeText(this, "Failed to delete comment", Toast.LENGTH_SHORT).show()
-            }
-    }
 }

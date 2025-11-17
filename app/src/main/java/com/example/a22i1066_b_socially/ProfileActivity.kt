@@ -15,10 +15,12 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
+import com.example.a22i1066_b_socially.network.RetrofitClient
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
@@ -29,6 +31,7 @@ import com.google.firebase.database.ValueEventListener
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
+import kotlinx.coroutines.launch
 import kotlin.text.set
 import kotlin.toString
 import com.google.firebase.firestore.FieldValue
@@ -136,7 +139,8 @@ class ProfileActivity : AppCompatActivity() {
     }
 
     private fun setupRecyclers() {
-        highlightsRecycler.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        highlightsRecycler.layoutManager =
+            LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         highlightAdapter = HighlightAdapter(
             mutableListOf(),
             { highlight -> openHighlight(highlight) },
@@ -223,7 +227,8 @@ class ProfileActivity : AppCompatActivity() {
                 val first = doc.getString("firstName").orEmpty().trim()
                 val last = doc.getString("lastName").orEmpty().trim()
                 val fullName = listOf(first, last).filter { it.isNotEmpty() }.joinToString(" ")
-                displayName.text = if (fullName.isNotEmpty()) fullName else doc.getString("displayName").orEmpty()
+                displayName.text =
+                    if (fullName.isNotEmpty()) fullName else doc.getString("displayName").orEmpty()
 
                 displayTitle.text = doc.getString("title").orEmpty()
                 val bio = doc.getString("bio").orEmpty()
@@ -298,6 +303,7 @@ class ProfileActivity : AppCompatActivity() {
                 val online = snapshot.child("online").getValue(Boolean::class.java) ?: false
                 profileOnlineIndicator.visibility = if (online) View.VISIBLE else View.GONE
             }
+
             override fun onCancelled(error: DatabaseError) {
                 profileOnlineIndicator.visibility = View.GONE
             }
@@ -320,7 +326,12 @@ class ProfileActivity : AppCompatActivity() {
                         bioText.movementMethod = null
                     }
                 }
-                spannable.setSpan(clickable, spannable.length - 4, spannable.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                spannable.setSpan(
+                    clickable,
+                    spannable.length - 4,
+                    spannable.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
                 bioText.text = spannable
                 bioText.movementMethod = LinkMovementMethod.getInstance()
             }
@@ -328,36 +339,39 @@ class ProfileActivity : AppCompatActivity() {
     }
 
     private fun loadUserPosts() {
-        postsListener = db.collection("posts")
-            .whereEqualTo("userId", targetUserId)
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Failed to load posts", error)
-                    return@addSnapshotListener
-                }
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@ProfileActivity).getAuthToken()}"
+                val response = RetrofitClient.instance.getUserPosts(token, targetUserId)
 
-                val posts = snapshot?.documents?.mapNotNull { doc ->
-                    try {
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val postsData = response.body()?.posts ?: emptyList()
+
+                    val posts = postsData.map { postItem ->
                         Post(
-                            id = doc.id,
-                            userId = doc.getString("userId") ?: "",
-                            username = doc.getString("username") ?: "",
-                            profilePicUrl = doc.getString("profilePicUrl") ?: "",
-                            imageUrls = doc.get("imageUrls") as? List<String> ?: emptyList(),
-                            caption = doc.getString("caption") ?: "",
-                            timestamp = doc.getTimestamp("timestamp"),
-                            likesCount = doc.getLong("likesCount") ?: 0L,
-                            commentsCount = doc.getLong("commentsCount") ?: 0L
+                            id = postItem.id,
+                            userId = postItem.userId,
+                            username = postItem.username,
+                            profilePicUrl = postItem.profilePicUrl,
+                            imageUrls = postItem.imageUrls,
+                            caption = postItem.caption,
+                            timestamp = postItem.timestamp,
+                            likesCount = postItem.likesCount,
+                            commentsCount = postItem.commentsCount,
+                            isLikedByCurrentUser = postItem.isLikedByCurrentUser
                         )
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing post", e)
-                        null
                     }
-                } ?: emptyList()
 
-                postsAdapter.updatePosts(posts)
+                    runOnUiThread {
+                        postsAdapter.updatePosts(posts)
+                    }
+                } else {
+                    Log.e(TAG, "Failed to load posts: ${response.body()?.error}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading posts", e)
             }
+        }
     }
 
     private fun loadHighlights() {
@@ -475,7 +489,11 @@ class ProfileActivity : AppCompatActivity() {
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Failed to follow", e)
-                Toast.makeText(this, "Failed to follow: ${e.message ?: "unknown error"}", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    this,
+                    "Failed to follow: ${e.message ?: "unknown error"}",
+                    Toast.LENGTH_LONG
+                ).show()
             }
     }
 
@@ -516,10 +534,18 @@ class ProfileActivity : AppCompatActivity() {
 
         // Update counts
         val currentUserRef = db.collection("users").document(currentUid)
-        batch.update(currentUserRef, "followingCount", com.google.firebase.firestore.FieldValue.increment(-1))
+        batch.update(
+            currentUserRef,
+            "followingCount",
+            com.google.firebase.firestore.FieldValue.increment(-1)
+        )
 
         val targetUserRef = db.collection("users").document(targetUserId)
-        batch.update(targetUserRef, "followersCount", com.google.firebase.firestore.FieldValue.increment(-1))
+        batch.update(
+            targetUserRef,
+            "followersCount",
+            com.google.firebase.firestore.FieldValue.increment(-1)
+        )
 
         batch.commit()
             .addOnSuccessListener {
@@ -529,7 +555,11 @@ class ProfileActivity : AppCompatActivity() {
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Failed to unfollow", e)
-                Toast.makeText(this, "Failed to unfollow: ${e.message ?: "unknown error"}", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    this,
+                    "Failed to unfollow: ${e.message ?: "unknown error"}",
+                    Toast.LENGTH_LONG
+                ).show()
             }
     }
 
@@ -586,8 +616,11 @@ class ProfileActivity : AppCompatActivity() {
             .setTitle("Options")
             .setItems(arrayOf("Block User", "Report User")) { _, which ->
                 when (which) {
-                    0 -> Toast.makeText(this, "Block feature coming soon", Toast.LENGTH_SHORT).show()
-                    1 -> Toast.makeText(this, "Report feature coming soon", Toast.LENGTH_SHORT).show()
+                    0 -> Toast.makeText(this, "Block feature coming soon", Toast.LENGTH_SHORT)
+                        .show()
+
+                    1 -> Toast.makeText(this, "Report feature coming soon", Toast.LENGTH_SHORT)
+                        .show()
                 }
             }
             .setNegativeButton("Cancel", null)

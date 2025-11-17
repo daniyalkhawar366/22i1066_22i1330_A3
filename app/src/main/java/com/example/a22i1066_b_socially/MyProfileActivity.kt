@@ -11,11 +11,13 @@ import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.bumptech.glide.Glide
+import com.example.a22i1066_b_socially.network.RetrofitClient
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -24,6 +26,7 @@ import android.widget.Toast
 import kotlin.collections.remove
 import androidx.appcompat.app.AlertDialog
 import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.launch
 
 
 class MyProfileActivity : AppCompatActivity() {
@@ -264,36 +267,39 @@ class MyProfileActivity : AppCompatActivity() {
     }
 
     private fun loadUserPosts(uid: String) {
-        postsListener = db.collection("posts")
-            .whereEqualTo("userId", uid)
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Failed to load posts", error)
-                    return@addSnapshotListener
-                }
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@MyProfileActivity).getAuthToken()}"
+                val response = RetrofitClient.instance.getUserPosts(token, uid)
 
-                val posts = snapshot?.documents?.mapNotNull { doc ->
-                    try {
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val postsData = response.body()?.posts ?: emptyList()
+
+                    val posts = postsData.map { postItem ->
                         Post(
-                            id = doc.id,
-                            userId = doc.getString("userId") ?: "",
-                            username = doc.getString("username") ?: "",
-                            profilePicUrl = doc.getString("profilePicUrl") ?: "",
-                            imageUrls = doc.get("imageUrls") as? List<String> ?: emptyList(),
-                            caption = doc.getString("caption") ?: "",
-                            timestamp = doc.getTimestamp("timestamp"),
-                            likesCount = doc.getLong("likesCount") ?: 0L,
-                            commentsCount = doc.getLong("commentsCount") ?: 0L
+                            id = postItem.id,
+                            userId = postItem.userId,
+                            username = postItem.username,
+                            profilePicUrl = postItem.profilePicUrl,
+                            imageUrls = postItem.imageUrls,
+                            caption = postItem.caption,
+                            timestamp = postItem.timestamp,
+                            likesCount = postItem.likesCount,
+                            commentsCount = postItem.commentsCount,
+                            isLikedByCurrentUser = postItem.isLikedByCurrentUser
                         )
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing post", e)
-                        null
                     }
-                } ?: emptyList()
 
-                postsAdapter.updatePosts(posts)
+                    runOnUiThread {
+                        postsAdapter.updatePosts(posts)
+                    }
+                } else {
+                    Log.e(TAG, "Failed to load posts: ${response.body()?.error}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading posts", e)
             }
+        }
     }
 
     private fun loadHighlights(uid: String) {

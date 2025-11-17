@@ -34,6 +34,7 @@ class MakePostActivity : AppCompatActivity() {
 
     private val TAG = "MakePostActivity"
     private val auth = FirebaseAuth.getInstance()
+    private lateinit var sessionManager: SessionManager
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -50,9 +51,21 @@ class MakePostActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.post)
 
-        val uid = auth.currentUser?.uid
+        sessionManager = SessionManager(this)
+
+        // Check session instead of Firebase Auth
+        if (!sessionManager.isLoggedIn()) {
+            Toast.makeText(this, "Not signed in. Please log in.", Toast.LENGTH_SHORT).show()
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+            return
+        }
+
+        val uid = sessionManager.getUserId()
         if (uid.isNullOrBlank()) {
-            Toast.makeText(this, "Not signed in", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Invalid session. Please log in again.", Toast.LENGTH_SHORT).show()
+            sessionManager.clearSession()
+            startActivity(Intent(this, LoginActivity::class.java))
             finish()
             return
         }

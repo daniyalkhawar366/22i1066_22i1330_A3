@@ -73,9 +73,13 @@ class PostAdapter(
     override fun getItemCount() = posts.size
 
     fun updatePosts(newPosts: List<Post>) {
+        android.util.Log.d("PostAdapter", "updatePosts called with ${newPosts.size} posts")
         posts.clear()
+        android.util.Log.d("PostAdapter", "After clear: ${posts.size}")
         posts.addAll(newPosts)
+        android.util.Log.d("PostAdapter", "After addAll: ${posts.size}")
         notifyDataSetChanged()
+        android.util.Log.d("PostAdapter", "notifyDataSetChanged called, itemCount: ${itemCount}")
     }
 
     fun updatePost(postId: String, newLikesCount: Int, isLiked: Boolean) {

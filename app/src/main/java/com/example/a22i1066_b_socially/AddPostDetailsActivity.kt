@@ -1,7 +1,9 @@
 package com.example.a22i1066_b_socially
 
-import android.app.Activity
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -14,29 +16,19 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.a22i1066_b_socially.network.RetrofitClient
-import com.google.firebase.Timestamp
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
-import java.io.IOException
-import java.util.concurrent.atomic.AtomicInteger
-import kotlin.text.get
-import kotlin.toString
-
+import java.io.ByteArrayOutputStream
+import kotlin.or
 
 class AddPostDetailsActivity : AppCompatActivity() {
 
     private val TAG = "AddPostDetailsActivity"
-    private val auth = FirebaseAuth.getInstance()
-    private val db = FirebaseFirestore.getInstance()
-    private val client = OkHttpClient()
+    private val MAX_IMAGE_SIZE = 1920 // Max width/height in pixels
+    private val COMPRESSION_QUALITY = 85 // JPEG quality (0-100)
 
-    private val CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dihbswob7/image/upload"
-    private val UPLOAD_PRESET = "mobile_unsigned_preset"
 
     private lateinit var closeBtn: TextView
     private lateinit var shareBtn: TextView
@@ -50,10 +42,12 @@ class AddPostDetailsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.add_post_details)
 
-        val uid = auth.currentUser?.uid
-        if (uid.isNullOrBlank()) {
+        val sessionManager = SessionManager(this)
+        val userId = sessionManager.getUserId()
+
+        if (userId.isNullOrBlank()) {
             Toast.makeText(this, "Not signed in", Toast.LENGTH_SHORT).show()
-            setResult(Activity.RESULT_CANCELED)
+            setResult(RESULT_CANCELED)
             finish()
             return
         }
@@ -75,14 +69,14 @@ class AddPostDetailsActivity : AppCompatActivity() {
         setupSelectedImagesRecycler()
 
         closeBtn.setOnClickListener {
-            setResult(Activity.RESULT_CANCELED)
+            setResult(RESULT_CANCELED)
             finish()
         }
 
         shareBtn.setOnClickListener {
             shareBtn.isEnabled = false
             progressBar.visibility = View.VISIBLE
-            uploadImagesAndCreatePost(uid)
+            uploadImagesAndCreatePost(userId)
         }
     }
 
@@ -92,89 +86,183 @@ class AddPostDetailsActivity : AppCompatActivity() {
         selectedImagesRecycler.adapter = adapter
     }
 
-    private fun uploadImagesAndCreatePost(uid: String) {
-        val uploadedUrls = mutableListOf<String>()
-        val totalImages = selectedImageUris.size
-        val uploadCounter = AtomicInteger(0)
-
-        selectedImageUris.forEach { uriString ->
+    private fun uploadImagesAndCreatePost(userId: String) {
+        lifecycleScope.launch {
             try {
-                val bytes = contentResolver.openInputStream(android.net.Uri.parse(uriString))?.use { it.readBytes() }
+                val uploadedUrls = mutableListOf<String>()
+                var uploadFailed = false
 
-                if (bytes == null) {
-                    Log.e(TAG, "Failed to read image: $uriString")
-                    handleUploadFailure()
-                    return@forEach
+                progressBar.progress = 0
+                val progressStep = 70 / selectedImageUris.size
+
+                Log.d(TAG, "========================================")
+                Log.d(TAG, "Starting upload for ${selectedImageUris.size} images")
+                Log.d(TAG, "User ID: $userId")
+                Log.d(TAG, "========================================")
+
+                // Upload each image using Retrofit Multipart (same as stories)
+                for ((index, uriString) in selectedImageUris.withIndex()) {
+                    if (uploadFailed) break
+
+                    try {
+                        val uri = Uri.parse(uriString)
+                        Log.d(TAG, "→ Uploading image ${index + 1}/${selectedImageUris.size}")
+                        Log.d(TAG, "  URI: $uri")
+                        Log.d(TAG, "  Scheme: ${uri.scheme}")
+
+                        // Compress image before upload
+                        Log.d(TAG, "  Compressing image...")
+                        val fileBytes = compressImage(uri)
+
+                        if (fileBytes == null) {
+                            Log.e(TAG, "✗ Failed to compress image")
+                            uploadFailed = true
+                            break
+                        }
+
+                        // Create multipart request (same as stories)
+                        val requestFile = fileBytes.toRequestBody("image/jpeg".toMediaTypeOrNull())
+                        val body = MultipartBody.Part.createFormData(
+                            "file",
+                            "post_${System.currentTimeMillis()}_$index.jpg",
+                            requestFile
+                        )
+                        val userIdBody = userId.toRequestBody("text/plain".toMediaTypeOrNull())
+
+                        Log.d(TAG, "  → Sending to server...")
+
+                        // Upload using Retrofit (same as stories)
+                        val uploadResponse = RetrofitClient.instance.uploadProfilePic(userIdBody, body)
+
+                        Log.d(TAG, "  ← Server response code: ${uploadResponse.code()}")
+
+                        if (uploadResponse.isSuccessful && uploadResponse.body()?.success == true) {
+                            val imageUrl = uploadResponse.body()?.url
+                            if (!imageUrl.isNullOrBlank()) {
+                                uploadedUrls.add(imageUrl)
+                                Log.d(TAG, "  ✓ SUCCESS! URL: $imageUrl")
+                                progressBar.progress += progressStep
+                            } else {
+                                Log.e(TAG, "✗ No URL returned for image ${index + 1}")
+                                uploadFailed = true
+                                break
+                            }
+                        } else {
+                            val error = uploadResponse.body()?.error ?: "Unknown error"
+                            Log.e(TAG, "✗ Upload failed: $error")
+                            Log.e(TAG, "  Response body: ${uploadResponse.errorBody()?.string()}")
+                            uploadFailed = true
+                            break
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "✗ Exception uploading image ${index + 1}: ${e.message}", e)
+                        uploadFailed = true
+                        break
+                    }
                 }
 
-                val mediaType = "image/*".toMediaTypeOrNull()
-                val fileBody = bytes.toRequestBody(mediaType)
-                val multipartBody = MultipartBody.Builder()
-                    .setType(MultipartBody.FORM)
-                    .addFormDataPart("file", "upload.jpg", fileBody)
-                    .addFormDataPart("upload_preset", UPLOAD_PRESET)
-                    .build()
-
-                val request = Request.Builder()
-                    .url(CLOUDINARY_URL)
-                    .post(multipartBody)
-                    .build()
-
-                client.newCall(request).enqueue(object : Callback {
-                    override fun onFailure(call: Call, e: IOException) {
-                        Log.e(TAG, "Upload failed for $uriString", e)
-                        runOnUiThread { handleUploadFailure() }
+                if (uploadFailed || uploadedUrls.isEmpty()) {
+                    Log.e(TAG, "========================================")
+                    Log.e(TAG, "UPLOAD FAILED - uploadFailed: $uploadFailed, uploadedUrls.size: ${uploadedUrls.size}")
+                    Log.e(TAG, "========================================")
+                    runOnUiThread {
+                        handleUploadFailure()
                     }
+                    return@launch
+                }
 
-                    override fun onResponse(call: Call, response: Response) {
-                        response.use {
-                            if (!it.isSuccessful) {
-                                Log.e(TAG, "Upload error: ${it.code}")
-                                runOnUiThread { handleUploadFailure() }
-                                return
-                            }
+                // All images uploaded, now create the post
+                Log.d(TAG, "========================================")
+                Log.d(TAG, "✓ All ${uploadedUrls.size} images uploaded successfully!")
+                Log.d(TAG, "→ Creating post in database...")
+                Log.d(TAG, "========================================")
+                progressBar.progress = 80
+                createPost(userId, uploadedUrls)
 
-                            val bodyStr = it.body?.string().orEmpty()
-                            try {
-                                val json = JSONObject(bodyStr)
-                                val secureUrl = json.optString("secure_url", json.optString("url"))
-
-                                if (secureUrl.isNullOrBlank()) {
-                                    Log.e(TAG, "No URL in response")
-                                    runOnUiThread { handleUploadFailure() }
-                                    return
-                                }
-
-                                synchronized(uploadedUrls) {
-                                    uploadedUrls.add(secureUrl)
-                                }
-
-                                if (uploadCounter.incrementAndGet() == totalImages) {
-                                    createPostInFirestore(uid, uploadedUrls)
-                                }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Parse error", e)
-                                runOnUiThread { handleUploadFailure() }
-                            }
-                        }
-                    }
-                })
             } catch (e: Exception) {
-                Log.e(TAG, "Error reading image", e)
-                runOnUiThread { handleUploadFailure() }
+                Log.e(TAG, "✗ CRITICAL ERROR in uploadImagesAndCreatePost: ${e.message}", e)
+                runOnUiThread {
+                    handleUploadFailure()
+                }
             }
         }
     }
 
-    private fun createPostInFirestore(uid: String, imageUrls: List<String>) {
+    private fun compressImage(uri: Uri): ByteArray? {
+        try {
+            // Read the image
+            val inputStream = contentResolver.openInputStream(uri)
+            val originalBitmap = BitmapFactory.decodeStream(inputStream)
+            inputStream?.close()
+
+            if (originalBitmap == null) {
+                Log.e(TAG, "Failed to decode bitmap")
+                return null
+            }
+
+            Log.d(TAG, "  Original size: ${originalBitmap.width}x${originalBitmap.height}")
+
+            // Calculate new dimensions to maintain aspect ratio
+            val width = originalBitmap.width
+            val height = originalBitmap.height
+            var newWidth = width
+            var newHeight = height
+
+            if (width > MAX_IMAGE_SIZE || height > MAX_IMAGE_SIZE) {
+                val ratio = width.toFloat() / height.toFloat()
+                if (width > height) {
+                    newWidth = MAX_IMAGE_SIZE
+                    newHeight = (MAX_IMAGE_SIZE / ratio).toInt()
+                } else {
+                    newHeight = MAX_IMAGE_SIZE
+                    newWidth = (MAX_IMAGE_SIZE * ratio).toInt()
+                }
+            }
+
+            Log.d(TAG, "  Compressed size: ${newWidth}x${newHeight}")
+
+            // Resize bitmap
+            val resizedBitmap = if (newWidth != width || newHeight != height) {
+                Bitmap.createScaledBitmap(originalBitmap, newWidth, newHeight, true)
+            } else {
+                originalBitmap
+            }
+
+            // Compress to JPEG
+            val outputStream = ByteArrayOutputStream()
+            resizedBitmap.compress(Bitmap.CompressFormat.JPEG, COMPRESSION_QUALITY, outputStream)
+            val compressedBytes = outputStream.toByteArray()
+
+            Log.d(TAG, "  Final file size: ${compressedBytes.size / 1024} KB")
+
+            // Clean up
+            if (resizedBitmap != originalBitmap) {
+                resizedBitmap.recycle()
+            }
+            originalBitmap.recycle()
+
+            return compressedBytes
+        } catch (e: Exception) {
+            Log.e(TAG, "Error compressing image: ${e.message}", e)
+            return null
+        }
+    }
+
+    private fun createPost(userId: String, imageUrls: List<String>) {
         val caption = captionInput.text.toString().trim()
-        val postId = "${uid}_${System.currentTimeMillis()}"
+        val postId = "${userId}_${System.currentTimeMillis()}"
         val timestamp = System.currentTimeMillis()
 
         lifecycleScope.launch {
             try {
                 val sessionManager = SessionManager(this@AddPostDetailsActivity)
                 val token = "Bearer ${sessionManager.getAuthToken()}"
+
+                Log.d(TAG, "Creating post with:")
+                Log.d(TAG, "  Post ID: $postId")
+                Log.d(TAG, "  Caption: ${if (caption.isEmpty()) "(empty)" else caption}")
+                Log.d(TAG, "  Images: ${imageUrls.size}")
+                imageUrls.forEachIndexed { i, url -> Log.d(TAG, "    [$i] $url") }
 
                 val request = com.example.a22i1066_b_socially.network.CreatePostRequest(
                     postId = postId,
@@ -185,26 +273,44 @@ class AddPostDetailsActivity : AppCompatActivity() {
 
                 val response = RetrofitClient.instance.createPost(token, request)
 
+                Log.d(TAG, "Create post response code: ${response.code()}")
+
+                // Log the raw response body to see what's being returned
+                if (!response.isSuccessful) {
+                    val errorBody = response.errorBody()?.string()
+                    Log.e(TAG, "Error response body: $errorBody")
+                } else {
+                    Log.d(TAG, "Response body: ${response.body()}")
+                }
+
                 if (response.isSuccessful && response.body()?.success == true) {
-                    Log.d(TAG, "Post created successfully")
+                    Log.d(TAG, "========================================")
+                    Log.d(TAG, "✓✓✓ POST CREATED SUCCESSFULLY! ✓✓✓")
+                    Log.d(TAG, "========================================")
                     runOnUiThread {
+                        progressBar.progress = 100
                         Toast.makeText(this@AddPostDetailsActivity, "Post shared!", Toast.LENGTH_SHORT).show()
-                        val intent = Intent(this@AddPostDetailsActivity, MyProfileActivity::class.java)
+                        // Navigate to FYP instead of MyProfile to see the new post
+                        val intent = Intent(this@AddPostDetailsActivity, FYPActivity::class.java)
                         intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
                         startActivity(intent)
                         finish()
                     }
                 } else {
-                    Log.e(TAG, "Failed to create post: ${response.body()?.error}")
-                    runOnUiThread { handleUploadFailure() }
+                    val error = response.body()?.error ?: response.errorBody()?.string() ?: "Unknown error"
+                    Log.e(TAG, "✗ Failed to create post: $error")
+                    runOnUiThread {
+                        Toast.makeText(this@AddPostDetailsActivity, "Post creation failed: $error", Toast.LENGTH_LONG).show()
+                        handleUploadFailure()
                     }
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to fetch user data", e)
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "✗ Exception creating post: ${e.message}", e)
                 runOnUiThread { handleUploadFailure() }
             }
+        }
     }
-
 
     private fun handleUploadFailure() {
         progressBar.visibility = View.GONE
@@ -212,3 +318,4 @@ class AddPostDetailsActivity : AppCompatActivity() {
         Toast.makeText(this, "Failed to upload images. Please try again.", Toast.LENGTH_LONG).show()
     }
 }
+

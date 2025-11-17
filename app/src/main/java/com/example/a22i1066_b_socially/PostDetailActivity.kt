@@ -10,12 +10,15 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import com.bumptech.glide.Glide
+import com.example.a22i1066_b_socially.network.RetrofitClient
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import android.app.Activity
+import kotlinx.coroutines.launch
 
 
 class PostDetailActivity : AppCompatActivity() {
@@ -97,36 +100,55 @@ class PostDetailActivity : AppCompatActivity() {
         loadingIndicator.visibility = View.VISIBLE
         postContent.visibility = View.GONE
 
-        db.collection("posts").document(postId).get()
-            .addOnSuccessListener { doc ->
-                if (doc != null && doc.exists()) {
-                    try {
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@PostDetailActivity).getAuthToken()}"
+                val response = RetrofitClient.instance.getPostsFeed(token)
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val postsData = response.body()?.posts ?: emptyList()
+                    val postItem = postsData.find { it.id == postId }
+
+                    if (postItem != null) {
                         val post = Post(
-                            id = doc.id,
-                            userId = doc.getString("userId") ?: "",
-                            username = doc.getString("username") ?: "",
-                            profilePicUrl = doc.getString("profilePicUrl") ?: "",
-                            imageUrls = doc.get("imageUrls") as? List<String> ?: emptyList(),
-                            caption = doc.getString("caption") ?: "",
-                            timestamp = doc.getTimestamp("timestamp"),
-                            likesCount = doc.getLong("likesCount") ?: 0L,
-                            commentsCount = doc.getLong("commentsCount") ?: 0L
+                            id = postItem.id,
+                            userId = postItem.userId,
+                            username = postItem.username,
+                            profilePicUrl = postItem.profilePicUrl,
+                            imageUrls = postItem.imageUrls,
+                            caption = postItem.caption,
+                            timestamp = postItem.timestamp,
+                            likesCount = postItem.likesCount,
+                            commentsCount = postItem.commentsCount,
+                            isLikedByCurrentUser = postItem.isLikedByCurrentUser
                         )
                         currentPost = post
-                        // Check if liked AFTER loading post
-                        checkIfLiked(postId)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing post", e)
-                        finish()
+
+                        runOnUiThread {
+                            displayPost(post)
+                            loadingIndicator.visibility = View.GONE
+                            postContent.visibility = View.VISIBLE
+                        }
+                    } else {
+                        runOnUiThread {
+                            Toast.makeText(this@PostDetailActivity, "Post not found", Toast.LENGTH_SHORT).show()
+                            finish()
+                        }
                     }
                 } else {
+                    runOnUiThread {
+                        Toast.makeText(this@PostDetailActivity, "Failed to load post", Toast.LENGTH_SHORT).show()
+                        finish()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading post", e)
+                runOnUiThread {
+                    Toast.makeText(this@PostDetailActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                     finish()
                 }
             }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to load post", e)
-                finish()
-            }
+        }
     }
 
     private fun checkIfLiked(postId: String) {

@@ -20,7 +20,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessaging
 import com.example.a22i1066_b_socially.network.RetrofitClient
 
-
 class FYPActivity : AppCompatActivity() {
     private val TAG = "FYPActivity"
     private val auth = FirebaseAuth.getInstance()
@@ -37,6 +36,8 @@ class FYPActivity : AppCompatActivity() {
     private lateinit var postsRecyclerView: RecyclerView
     private lateinit var swipeRefresh: SwipeRefreshLayout
 
+    private lateinit var adapter: PostAdapter
+    private val posts = mutableListOf<Post>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,6 +57,7 @@ class FYPActivity : AppCompatActivity() {
         }
 
         setContentView(R.layout.foryou)
+
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (task.isSuccessful) {
                 val token = task.result
@@ -68,8 +70,6 @@ class FYPActivity : AppCompatActivity() {
             }
         }
 
-
-
         initializeViews()
         setupRecyclerView()
         setupBottomNavigation()
@@ -80,18 +80,6 @@ class FYPActivity : AppCompatActivity() {
         loadPosts()
     }
 
-    private fun setupPostsAdapter() {
-        postsRecyclerView.adapter = adapter
-        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, "Check out this post by ${post.username}!")
-        }
-        startActivity(Intent.createChooser(shareIntent, "Share via"))
-    }
-
-
-
-    private fun openComments(post: Post) {
     private fun initializeViews() {
         storiesRow = findViewById(R.id.storiesRow)
         cameraBtn = findViewById(R.id.cameraBtn)
@@ -160,6 +148,30 @@ class FYPActivity : AppCompatActivity() {
         }
     }
 
+    private fun sharePost(post: Post) {
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, "Check out this post by ${post.username}!")
+        }
+        startActivity(Intent.createChooser(shareIntent, "Share via"))
+    }
+
+    private fun handleComment(post: Post) {
+        val intent = Intent(this, CommentsActivity::class.java)
+        intent.putExtra("postId", post.id)
+        startActivity(intent)
+    }
+
+    private fun openProfile(userId: String) {
+        if (userId == currentUserId) {
+            startActivity(Intent(this, MyProfileActivity::class.java))
+        } else {
+            val intent = Intent(this, ProfileActivity::class.java)
+            intent.putExtra("userId", userId)
+            startActivity(intent)
+        }
+    }
+
     private fun loadCurrentUserProfile() {
         val userId = auth.currentUser?.uid ?: return
 
@@ -172,8 +184,7 @@ class FYPActivity : AppCompatActivity() {
                     if (userProfileResponse?.success == true && userProfileResponse.user != null) {
                         val profilePic = userProfileResponse.user.profilePicUrl
                         runOnUiThread {
-                            // Load profile pic in bottom navigation
-                            if (!profilePic.isNullOrBlank()) {
+                            if (profilePic.isNotBlank()) {
                                 Glide.with(this@FYPActivity)
                                     .load(profilePic)
                                     .circleCrop()
@@ -197,20 +208,27 @@ class FYPActivity : AppCompatActivity() {
         }
     }
 
-
-
-
     private fun loadPosts(shuffle: Boolean = false) {
         lifecycleScope.launch {
             try {
                 val token = "Bearer ${SessionManager(this@FYPActivity).getAuthToken()}"
+                Log.d(TAG, "========================================")
+                Log.d(TAG, "Loading posts from feed...")
+                Log.d(TAG, "Token: ${token.take(20)}...")
+
                 val response = RetrofitClient.instance.getPostsFeed(token)
+
+                Log.d(TAG, "Posts response code: ${response.code()}")
+                Log.d(TAG, "Response successful: ${response.isSuccessful}")
+                Log.d(TAG, "Response body success: ${response.body()?.success}")
 
                 if (response.isSuccessful && response.body()?.success == true) {
                     val postsData = response.body()?.posts ?: emptyList()
+                    Log.d(TAG, "Loaded ${postsData.size} posts")
 
                     posts.clear()
                     postsData.forEach { postItem ->
+                        Log.d(TAG, "Post ${postItem.id}: ${postItem.imageUrls.size} images")
                         posts.add(Post(
                             id = postItem.id,
                             userId = postItem.userId,
@@ -227,11 +245,27 @@ class FYPActivity : AppCompatActivity() {
 
                     if (shuffle) posts.shuffle()
 
+                    Log.d(TAG, "Total posts in list: ${posts.size}")
+                    Log.d(TAG, "Updating adapter...")
+
+                    // Create a copy to pass to the UI thread
+                    val postsCopy = posts.toList()
+                    Log.d(TAG, "Posts copy size: ${postsCopy.size}")
+
                     runOnUiThread {
-                        adapter.updatePosts(posts)
+                        adapter.updatePosts(postsCopy)
+                        Log.d(TAG, "Adapter updated with ${adapter.itemCount} posts")
+                        Log.d(TAG, "RecyclerView adapter item count: ${postsRecyclerView.adapter?.itemCount}")
+                        Log.d(TAG, "========================================")
                         swipeRefresh.isRefreshing = false
                     }
                 } else {
+                    val errorBody = response.errorBody()?.string()
+                    Log.e(TAG, "========================================")
+                    Log.e(TAG, "Failed to load posts!")
+                    Log.e(TAG, "Response code: ${response.code()}")
+                    Log.e(TAG, "Error body: $errorBody")
+                    Log.e(TAG, "========================================")
                     runOnUiThread {
                         Toast.makeText(this@FYPActivity, "Failed to load posts", Toast.LENGTH_SHORT).show()
                         swipeRefresh.isRefreshing = false
@@ -246,7 +280,6 @@ class FYPActivity : AppCompatActivity() {
             }
         }
     }
-
 
 
     private fun handleLike(post: Post) {
@@ -284,33 +317,11 @@ class FYPActivity : AppCompatActivity() {
         }
     }
 
-
-
-
-    private fun handleComment(post: Post) {
-        val intent = Intent(this, CommentsActivity::class.java)
-        intent.putExtra("postId", post.id)
-        startActivity(intent)
-    }
-
-    private fun openProfile(userId: String) {
-        val currentUserId = auth.currentUser?.uid
-        if (userId == currentUserId) {
-            startActivity(Intent(this, MyProfileActivity::class.java))
-        } else {
-            val intent = Intent(this, ProfileActivity::class.java)
-            intent.putExtra("userId", userId)
-            startActivity(intent)
-        }
-    }
-
     private fun fetchAndDisplayStories() {
         storiesRow.removeAllViews()
 
-        // Add current user's story first
         addCurrentUserStory()
 
-        // Load all active stories from backend
         lifecycleScope.launch {
             try {
                 val token = "Bearer ${SessionManager(this@FYPActivity).getAuthToken()}"
@@ -318,14 +329,12 @@ class FYPActivity : AppCompatActivity() {
 
                 if (response.isSuccessful && response.body()?.success == true) {
                     val stories = response.body()?.stories ?: emptyList()
-
-                    // Group stories by userId to show one circle per user
                     val storiesByUser = stories.groupBy { it.userId }
 
                     runOnUiThread {
                         storiesByUser.forEach { (userId, userStories) ->
                             if (userId != currentUserId) {
-                                val story = userStories.first() // Take first story for the user
+                                val story = userStories.first()
 
                                 val storyView = LayoutInflater.from(this@FYPActivity)
                                     .inflate(R.layout.story_item, storiesRow, false)
@@ -372,11 +381,7 @@ class FYPActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val token = "Bearer ${SessionManager(this@FYPActivity).getAuthToken()}"
-
-                // Get current user's profile
                 val profileResponse = RetrofitClient.instance.getUserProfile("profile", currentUserId)
-
-                // Get current user's stories
                 val storiesResponse = RetrofitClient.instance.getUserStories(token, currentUserId)
 
                 if (profileResponse.isSuccessful && profileResponse.body()?.success == true) {
@@ -426,8 +431,6 @@ class FYPActivity : AppCompatActivity() {
 
                         storiesRow.addView(storyView, 0)
                     }
-                } else {
-                    Log.e(TAG, "Failed to load user profile for story")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading current user story", e)
@@ -441,3 +444,4 @@ class FYPActivity : AppCompatActivity() {
         loadCurrentUserProfile()
     }
 }
+
