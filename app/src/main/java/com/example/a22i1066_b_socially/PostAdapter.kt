@@ -1,15 +1,19 @@
 package com.example.a22i1066_b_socially
 
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.StyleSpan
+import android.graphics.Typeface
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.bumptech.glide.Glide
-import java.text.SimpleDateFormat
-import java.util.*
 
 class PostAdapter(
     private val posts: MutableList<Post>,
@@ -29,7 +33,15 @@ class PostAdapter(
         val shareBtn: ImageView = view.findViewById(R.id.shareBtn)
         val bookmarkBtn: ImageView = view.findViewById(R.id.bookmarkBtn)
         val likes: TextView = view.findViewById(R.id.likes)
-        val caption: TextView = view.findViewById(R.id.caption)
+
+        // Instagram-style caption section
+        val captionSection: LinearLayout = view.findViewById(R.id.captionSection)
+        val captionProfilePic: ImageView = view.findViewById(R.id.captionProfilePic)
+        val captionWithUsername: TextView = view.findViewById(R.id.captionWithUsername)
+
+        // Comments preview
+        val commentsPreviewRecycler: RecyclerView = view.findViewById(R.id.commentsPreviewRecycler)
+        val viewAllComments: TextView = view.findViewById(R.id.viewAllComments)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PostViewHolder {
@@ -42,8 +54,8 @@ class PostAdapter(
         val post = posts[position]
 
         holder.username.text = post.username
-        holder.caption.text = post.caption
 
+        // Load profile pic
         if (post.profilePicUrl.isNotBlank()) {
             Glide.with(holder.itemView.context)
                 .load(post.profilePicUrl)
@@ -51,18 +63,69 @@ class PostAdapter(
                 .placeholder(R.drawable.profile_pic)
                 .error(R.drawable.profile_pic)
                 .into(holder.profilePic)
+
+            Glide.with(holder.itemView.context)
+                .load(post.profilePicUrl)
+                .circleCrop()
+                .placeholder(R.drawable.profile_pic)
+                .error(R.drawable.profile_pic)
+                .into(holder.captionProfilePic)
         } else {
             holder.profilePic.setImageResource(R.drawable.profile_pic)
+            holder.captionProfilePic.setImageResource(R.drawable.profile_pic)
         }
 
+        // Setup image ViewPager
         val imageAdapter = PostImageAdapter(post.imageUrls)
         holder.imageViewPager.adapter = imageAdapter
 
+        // Likes count
         holder.likes.text = "${post.likesCount} likes"
 
+        // Like button icon
         val likeIcon = if (post.isLikedByCurrentUser) R.drawable.like_filled else R.drawable.like
         holder.likeBtn.setImageResource(likeIcon)
 
+        // Caption section (Instagram style)
+        if (post.caption.isNotBlank()) {
+            holder.captionSection.visibility = View.VISIBLE
+
+            // Create spannable string with bold username
+            val fullCaption = "${post.username} ${post.caption}"
+            val spannable = SpannableString(fullCaption)
+            spannable.setSpan(
+                StyleSpan(Typeface.BOLD),
+                0,
+                post.username.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+
+            holder.captionWithUsername.text = spannable
+        } else {
+            holder.captionSection.visibility = View.GONE
+        }
+
+        // Comments preview (show max 2 comments)
+        if (post.previewComments.isNotEmpty()) {
+            holder.commentsPreviewRecycler.visibility = View.VISIBLE
+            val commentsAdapter = CommentPreviewAdapter(post.previewComments)
+            holder.commentsPreviewRecycler.adapter = commentsAdapter
+            holder.commentsPreviewRecycler.layoutManager = LinearLayoutManager(holder.itemView.context)
+
+            // Show "View all comments" if there are more than 2 comments
+            if (post.commentsCount > 2) {
+                holder.viewAllComments.visibility = View.VISIBLE
+                holder.viewAllComments.text = "View all ${post.commentsCount} comments"
+                holder.viewAllComments.setOnClickListener { onCommentClick(post) }
+            } else {
+                holder.viewAllComments.visibility = View.GONE
+            }
+        } else {
+            holder.commentsPreviewRecycler.visibility = View.GONE
+            holder.viewAllComments.visibility = View.GONE
+        }
+
+        // Click listeners
         holder.profilePic.setOnClickListener { onProfileClick(post.userId) }
         holder.username.setOnClickListener { onProfileClick(post.userId) }
         holder.likeBtn.setOnClickListener { onLikeClick(post) }

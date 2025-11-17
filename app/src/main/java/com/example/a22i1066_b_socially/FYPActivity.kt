@@ -228,7 +228,20 @@ class FYPActivity : AppCompatActivity() {
 
                     posts.clear()
                     postsData.forEach { postItem ->
-                        Log.d(TAG, "Post ${postItem.id}: ${postItem.imageUrls.size} images")
+                        Log.d(TAG, "Post ${postItem.id}: ${postItem.imageUrls.size} images, ${postItem.previewComments?.size ?: 0} preview comments")
+
+                        // Map preview comments from API to Comment objects
+                        val previewComments = postItem.previewComments?.map { commentItem ->
+                            Comment(
+                                commentId = commentItem.id,
+                                userId = commentItem.userId,
+                                username = commentItem.username,
+                                profilePicUrl = commentItem.profilePicUrl,
+                                text = commentItem.text,
+                                timestamp = commentItem.timestamp
+                            )
+                        } ?: emptyList()
+
                         posts.add(Post(
                             id = postItem.id,
                             userId = postItem.userId,
@@ -239,7 +252,8 @@ class FYPActivity : AppCompatActivity() {
                             timestamp = postItem.timestamp,
                             likesCount = postItem.likesCount,
                             commentsCount = postItem.commentsCount,
-                            isLikedByCurrentUser = postItem.isLikedByCurrentUser
+                            isLikedByCurrentUser = postItem.isLikedByCurrentUser,
+                            previewComments = previewComments
                         ))
                     }
 

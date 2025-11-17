@@ -4,6 +4,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 
@@ -13,6 +14,7 @@ class PostImageAdapter(
 
     inner class ImageViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val imageView: ImageView = view.findViewById(R.id.postImage)
+        val imageCounter: TextView = view.findViewById(R.id.imageCounter)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ImageViewHolder {
@@ -26,6 +28,14 @@ class PostImageAdapter(
             .load(imageUrls[position])
             .centerCrop()
             .into(holder.imageView)
+
+        // Show image counter if multiple images
+        if (imageUrls.size > 1) {
+            holder.imageCounter.visibility = View.VISIBLE
+            holder.imageCounter.text = "${position + 1}/${imageUrls.size}"
+        } else {
+            holder.imageCounter.visibility = View.GONE
+        }
     }
 
     override fun getItemCount() = imageUrls.size

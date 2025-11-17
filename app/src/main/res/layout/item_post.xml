@@ -25,23 +25,10 @@
         android:textColor="#262626"
         android:textSize="14sp"
         android:textStyle="bold"
-        app:layout_constraintBottom_toTopOf="@id/location"
-        app:layout_constraintEnd_toStartOf="@id/moreBtn"
-        app:layout_constraintStart_toEndOf="@id/profilePic"
-        app:layout_constraintTop_toTopOf="@id/profilePic"/>
-
-    <TextView
-        android:id="@+id/location"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:textColor="#8E8E8E"
-        android:textSize="12sp"
-        android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="@id/profilePic"
         app:layout_constraintEnd_toStartOf="@id/moreBtn"
         app:layout_constraintStart_toEndOf="@id/profilePic"
-        app:layout_constraintTop_toBottomOf="@id/username"/>
+        app:layout_constraintTop_toTopOf="@id/profilePic"/>
 
     <ImageView
         android:id="@+id/moreBtn"
@@ -104,7 +91,6 @@
         app:layout_constraintTop_toTopOf="@id/likeBtn"/>
 
     <!-- Likes Count -->
-    <!-- Likes Count -->
     <TextView
         android:id="@+id/likes"
         android:layout_width="wrap_content"
@@ -118,23 +104,66 @@
         app:layout_constraintTop_toBottomOf="@id/likeBtn"
         app:layout_constraintStart_toStartOf="parent"/>
 
-
-    <!-- Caption -->
-    <TextView
-        android:id="@+id/caption"
+    <!-- Caption Section (Instagram Style) -->
+    <LinearLayout
+        android:id="@+id/captionSection"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
-        android:layout_marginTop="4dp"
         android:layout_marginEnd="12dp"
-        android:layout_marginBottom="12dp"
-        android:maxLines="2"
-        android:ellipsize="end"
-        android:textColor="#262626"
-        android:textSize="14sp"
-        app:layout_constraintBottom_toBottomOf="parent"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal"
+        android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/likes"/>
+        app:layout_constraintTop_toBottomOf="@id/likes">
+
+        <ImageView
+            android:id="@+id/captionProfilePic"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/profile_pic"
+            android:layout_gravity="top"/>
+
+        <TextView
+            android:id="@+id/captionWithUsername"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:textColor="#262626"
+            android:textSize="14sp"
+            android:maxLines="3"
+            android:ellipsize="end"/>
+    </LinearLayout>
+
+    <!-- Comments Preview RecyclerView -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/commentsPreviewRecycler"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginTop="4dp"
+        android:nestedScrollingEnabled="false"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/captionSection"/>
+
+    <!-- View All Comments -->
+    <TextView
+        android:id="@+id/viewAllComments"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="12dp"
+        android:text="View all comments"
+        android:textColor="#8E8E8E"
+        android:textSize="14sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/commentsPreviewRecycler"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

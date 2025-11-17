@@ -10,5 +10,6 @@ data class Post(
     val timestamp: Long = 0L,
     var likesCount: Int = 0,
     var commentsCount: Int = 0,
-    var isLikedByCurrentUser: Boolean = false
+    var isLikedByCurrentUser: Boolean = false,
+    var previewComments: List<Comment> = emptyList() // For showing 1-2 comments on FYP
 )

@@ -257,7 +257,8 @@ data class PostItem(
     val likesCount: Int,
     val commentsCount: Int,
     val timestamp: Long,
-    val isLikedByCurrentUser: Boolean
+    val isLikedByCurrentUser: Boolean,
+    val previewComments: List<CommentItem>? = emptyList()
 )
 
 data class PostsResponse(
