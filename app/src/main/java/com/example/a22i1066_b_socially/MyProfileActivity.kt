@@ -54,8 +54,6 @@ class MyProfileActivity : AppCompatActivity() {
     private lateinit var postsAdapter: ProfilePostAdapter
     private val postsList = mutableListOf<Post>()
 
-    private var profileListener: ListenerRegistration? = null
-    private var postsListener: ListenerRegistration? = null
     private var highlightsListener: ListenerRegistration? = null
 
     private val TAG = "MyProfileActivity"
@@ -63,8 +61,11 @@ class MyProfileActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val uid = auth.currentUser?.uid
-        if (uid.isNullOrBlank()) {
+        // Check SessionManager for login status instead of Firebase Auth
+        val sessionManager = SessionManager(this)
+        val uid = sessionManager.getUserId()
+
+        if (uid.isNullOrBlank() || !sessionManager.isLoggedIn()) {
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
             return
@@ -115,14 +116,14 @@ class MyProfileActivity : AppCompatActivity() {
             }
             followersCount.setOnClickListener {
                 val intent = Intent(this, FollowersFollowingActivity::class.java)
-                intent.putExtra("userId", auth.currentUser?.uid ?: "")
+                intent.putExtra("userId", uid ?: "")
                 intent.putExtra("listType", "followers")
                 startActivity(intent)
             }
 
             followingCount.setOnClickListener {
                 val intent = Intent(this, FollowersFollowingActivity::class.java)
-                intent.putExtra("userId", auth.currentUser?.uid ?: "")
+                intent.putExtra("userId", uid ?: "")
                 intent.putExtra("listType", "following")
                 startActivity(intent)
             }
@@ -157,13 +158,12 @@ class MyProfileActivity : AppCompatActivity() {
     }
 
     private fun refreshProfile() {
-        val uid = auth.currentUser?.uid ?: return
+        val sessionManager = SessionManager(this)
+        val uid = sessionManager.getUserId() ?: return
 
         // Don't hide profileContent during refresh
         swipeRefresh.isRefreshing = true
 
-        profileListener?.remove()
-        postsListener?.remove()
         highlightsListener?.remove()
 
         loadProfile()
@@ -222,48 +222,62 @@ class MyProfileActivity : AppCompatActivity() {
     }
 
     private fun loadProfile() {
-        val uid = auth.currentUser?.uid ?: return
+        val sessionManager = SessionManager(this)
+        val uid = sessionManager.getUserId() ?: return
 
-        profileListener = db.collection("users").document(uid)
-            .addSnapshotListener { doc, error ->
-                if (error != null) {
-                    Log.e(TAG, "Failed to listen profile", error)
-                    showContent()
-                    return@addSnapshotListener
-                }
-                if (doc == null || !doc.exists()) {
-                    showContent()
-                    return@addSnapshotListener
-                }
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserProfile(
+                    userId = uid,
+                    currentUserId = uid
+                )
 
-                val username = doc.getString("username").orEmpty()
-                toolbarUsername.text = username
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val user = response.body()?.user
+                    if (user == null) {
+                        runOnUiThread {
+                            showContent()
+                        }
+                        return@launch
+                    }
 
-                val first = doc.getString("firstName").orEmpty().trim()
-                val last = doc.getString("lastName").orEmpty().trim()
-                val fullName = listOf(first, last).filter { it.isNotEmpty() }.joinToString(" ")
-                displayName.text = if (fullName.isNotEmpty()) fullName else doc.getString("displayName").orEmpty()
+                    runOnUiThread {
+                        toolbarUsername.text = user.username
 
-                displayTitle.text = doc.getString("title").orEmpty()
-                bioText.text = doc.getString("bio").orEmpty()
+                        val first = user.firstName.trim()
+                        val last = user.lastName.trim()
+                        val fullName = listOf(first, last).filter { it.isNotEmpty() }.joinToString(" ")
+                        displayName.text = if (fullName.isNotEmpty()) fullName else user.displayName
 
-                val postsCountVal = (doc.getLong("postsCount") ?: 0L)
-                val followersCountVal = (doc.getLong("followersCount") ?: 0L)
-                val followingCountVal = (doc.getLong("followingCount") ?: 0L)
+                        displayTitle.text = user.title
+                        bioText.text = user.bio
 
-                postsCount.text = postsCountVal.toString()
-                followersCount.text = followersCountVal.toString()
-                followingCount.text = followingCountVal.toString()
+                        postsCount.text = user.postsCount.toString()
+                        followersCount.text = user.followersCount.toString()
+                        followingCount.text = user.followingCount.toString()
 
-                val pic = doc.getString("profilePicUrl").orEmpty()
-                if (pic.isNotBlank()) {
-                    Glide.with(this).load(pic).circleCrop().into(profileImage)
+                        val pic = user.profilePicUrl
+                        if (pic.isNotBlank()) {
+                            Glide.with(this@MyProfileActivity).load(pic).circleCrop().into(profileImage)
+                        } else {
+                            profileImage.setImageResource(R.drawable.profile_pic)
+                        }
+
+                        showContent()
+                    }
                 } else {
-                    profileImage.setImageResource(R.drawable.profile_pic)
+                    Log.e(TAG, "Failed to load profile: ${response.body()?.error}")
+                    runOnUiThread {
+                        showContent()
+                    }
                 }
-
-                showContent()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading profile", e)
+                runOnUiThread {
+                    showContent()
+                }
             }
+        }
     }
 
     private fun loadUserPosts(uid: String) {
@@ -345,10 +359,7 @@ class MyProfileActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        profileListener?.remove()
-        profileListener = null
-        postsListener?.remove()
-        postsListener = null
+        // Note: We no longer use Firestore listeners for profile data
         highlightsListener?.remove()
         highlightsListener = null
     }

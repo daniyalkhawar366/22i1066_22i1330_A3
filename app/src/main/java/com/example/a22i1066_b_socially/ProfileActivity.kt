@@ -21,7 +21,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.example.a22i1066_b_socially.network.RetrofitClient
-import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -32,8 +31,6 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.launch
-import kotlin.text.set
-import kotlin.toString
 import com.google.firebase.firestore.FieldValue
 
 class ProfileActivity : AppCompatActivity() {
@@ -68,8 +65,6 @@ class ProfileActivity : AppCompatActivity() {
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
 
-    private var profileListener: ListenerRegistration? = null
-    private var postsListener: ListenerRegistration? = null
     private var highlightsListener: ListenerRegistration? = null
     private var profileStatusRef: DatabaseReference? = null
     private var profileStatusListener: ValueEventListener? = null
@@ -81,13 +76,12 @@ class ProfileActivity : AppCompatActivity() {
     private val TAG = "ProfileActivity"
 
     override fun onCreate(savedInstanceState: Bundle?) {
-
         super.onCreate(savedInstanceState)
         setContentView(R.layout.profile_layout)
 
         targetUserId = intent.getStringExtra("userId")
             ?: intent.getStringExtra("USER_ID")
-                    ?: ""
+            ?: ""
 
         if (targetUserId.isEmpty()) {
             Toast.makeText(this, "Invalid user", Toast.LENGTH_SHORT).show()
@@ -159,7 +153,6 @@ class ProfileActivity : AppCompatActivity() {
         postsRecyclerView.adapter = postsAdapter
     }
 
-
     private fun setupListeners() {
         backArrow.setOnClickListener { finish() }
         menuDots.setOnClickListener { showMenu() }
@@ -181,6 +174,7 @@ class ProfileActivity : AppCompatActivity() {
             intent.putExtra("listType", "following")
             startActivity(intent)
         }
+
         // Bottom navigation
         findViewById<ImageView>(R.id.homebtn).setOnClickListener {
             startActivity(Intent(this, FYPActivity::class.java))
@@ -204,93 +198,98 @@ class ProfileActivity : AppCompatActivity() {
     }
 
     private fun loadProfile() {
-        profileListener = db.collection("users").document(targetUserId)
-            .addSnapshotListener { doc, error ->
-                if (error != null) {
-                    Log.e(TAG, "Failed to listen profile", error)
-                    showContent()
-                    return@addSnapshotListener
-                }
-                if (doc == null || !doc.exists()) {
-                    Toast.makeText(this, "User not found", Toast.LENGTH_SHORT).show()
-                    showContent()
-                    finish()
-                    return@addSnapshotListener
-                }
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserProfile(
+                    userId = targetUserId,
+                    currentUserId = currentUid
+                )
 
-                // Setup online status listener
-                setupOnlineStatusListener()
-
-                val username = doc.getString("username").orEmpty()
-                toolbarUsername.text = username
-
-                val first = doc.getString("firstName").orEmpty().trim()
-                val last = doc.getString("lastName").orEmpty().trim()
-                val fullName = listOf(first, last).filter { it.isNotEmpty() }.joinToString(" ")
-                displayName.text =
-                    if (fullName.isNotEmpty()) fullName else doc.getString("displayName").orEmpty()
-
-                displayTitle.text = doc.getString("title").orEmpty()
-                val bio = doc.getString("bio").orEmpty()
-                bioText.text = bio
-                if (bio.length > 100) {
-                    setupBioExpandable(bio)
-                }
-
-                val threadsUser = doc.getString("threadsUsername")?.takeIf { it.isNotBlank() }
-                    ?: username.takeIf { it.isNotBlank() }?.let { it } ?: ""
-                if (threadsUser.isNotEmpty()) {
-                    threadsUsername.text = threadsUser
-                    threadsLink.visibility = View.VISIBLE
-                } else {
-                    threadsLink.visibility = View.GONE
-                }
-
-                val postsCountVal = (doc.getLong("postsCount") ?: 0L)
-                val followersCountVal = (doc.getLong("followersCount") ?: 0L)
-                val followingCountVal = (doc.getLong("followingCount") ?: 0L)
-
-                postsCount.text = postsCountVal.toString()
-                followersCount.text = followersCountVal.toString()
-                followingCount.text = followingCountVal.toString()
-
-                // Fallback to counting subcollections if numeric fields missing/zero
-                if (followersCountVal == 0L) {
-                    db.collection("users").document(targetUserId)
-                        .collection("followers").get()
-                        .addOnSuccessListener { snaps ->
-                            val actual = snaps.size()
-                            if (actual > 0) followersCount.text = actual.toString()
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val user = response.body()?.user
+                    if (user == null) {
+                        runOnUiThread {
+                            Toast.makeText(this@ProfileActivity, "User not found", Toast.LENGTH_SHORT).show()
+                            showContent()
+                            finish()
                         }
-                }
-                if (followingCountVal == 0L) {
-                    db.collection("users").document(targetUserId)
-                        .collection("following").get()
-                        .addOnSuccessListener { snaps ->
-                            val actual = snaps.size()
-                            if (actual > 0) followingCount.text = actual.toString()
+                        return@launch
+                    }
+
+                    runOnUiThread {
+                        // Setup online status listener (still using Firebase Realtime DB for presence)
+                        setupOnlineStatusListener()
+
+                        toolbarUsername.text = user.username
+
+                        val first = user.firstName.trim()
+                        val last = user.lastName.trim()
+                        val fullName = listOf(first, last).filter { it.isNotEmpty() }.joinToString(" ")
+                        displayName.text = if (fullName.isNotEmpty()) fullName else user.displayName
+
+                        displayTitle.text = user.title
+                        val bio = user.bio
+                        bioText.text = bio
+                        if (bio.length > 100) {
+                            setupBioExpandable(bio)
                         }
-                }
 
-                val pic = doc.getString("profilePicUrl").orEmpty()
-                if (pic.isNotBlank()) {
-                    Glide.with(this).load(pic).circleCrop().into(profileImage)
-                    Glide.with(this).load(pic).circleCrop().into(bottomProfileThumb)
+                        val threadsUser = user.threadsUsername.takeIf { it.isNotBlank() }
+                            ?: user.username.takeIf { it.isNotBlank() } ?: ""
+                        if (threadsUser.isNotEmpty()) {
+                            threadsUsername.text = threadsUser
+                            threadsLink.visibility = View.VISIBLE
+                        } else {
+                            threadsLink.visibility = View.GONE
+                        }
+
+                        postsCount.text = user.postsCount.toString()
+                        followersCount.text = user.followersCount.toString()
+                        followingCount.text = user.followingCount.toString()
+
+                        val pic = user.profilePicUrl
+                        if (pic.isNotBlank()) {
+                            Glide.with(this@ProfileActivity).load(pic).circleCrop().into(profileImage)
+                            Glide.with(this@ProfileActivity).load(pic).circleCrop().into(bottomProfileThumb)
+                        } else {
+                            profileImage.setImageResource(R.drawable.profile_pic)
+                            bottomProfileThumb.setImageResource(R.drawable.profileicon)
+                        }
+
+                        // Hide follow button on own profile
+                        if (currentUid.isNotBlank() && currentUid == targetUserId) {
+                            followButton.visibility = View.GONE
+                        } else {
+                            followButton.visibility = View.VISIBLE
+                            // Use isFollowing from API response
+                            setFollowUi(user.isFollowing)
+                        }
+
+                        showContent()
+                    }
                 } else {
-                    profileImage.setImageResource(R.drawable.profile_pic)
-                    bottomProfileThumb.setImageResource(R.drawable.profileicon)
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@ProfileActivity,
+                            "Failed to load profile: ${response.body()?.error}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        showContent()
+                        finish()
+                    }
                 }
-
-                // Hide follow button on own profile
-                if (currentUid.isNotBlank() && currentUid == targetUserId) {
-                    followButton.visibility = View.GONE
-                } else {
-                    followButton.visibility = View.VISIBLE
-                    checkFollowStatus()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading profile", e)
+                runOnUiThread {
+                    Toast.makeText(
+                        this@ProfileActivity,
+                        "Error loading profile: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    showContent()
                 }
-
-                showContent()
             }
+        }
     }
 
     private fun setupOnlineStatusListener() {
@@ -403,23 +402,6 @@ class ProfileActivity : AppCompatActivity() {
             }
     }
 
-    private fun checkFollowStatus() {
-        if (currentUid.isBlank()) {
-            setFollowUi(false)
-            return
-        }
-
-        db.collection("users").document(targetUserId)
-            .collection("followers").document(currentUid)
-            .get()
-            .addOnSuccessListener { doc ->
-                setFollowUi(doc.exists())
-            }
-            .addOnFailureListener {
-                setFollowUi(false)
-            }
-    }
-
     private fun setFollowUi(following: Boolean) {
         isFollowing = following
         if (following) {
@@ -459,42 +441,43 @@ class ProfileActivity : AppCompatActivity() {
     private fun followUser() {
         if (currentUid.isBlank() || currentUid == targetUserId) return
 
-        val now = Timestamp.now()
-        val batch = db.batch()
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@ProfileActivity).getAuthToken()}"
+                val request = com.example.a22i1066_b_socially.network.FollowRequest(targetUserId)
+                val response = RetrofitClient.instance.followUser(token, request)
 
-        // Add to target user's followers
-        val followerRef = db.collection("users").document(targetUserId)
-            .collection("followers").document(currentUid)
-        batch.set(followerRef, mapOf("since" to now))
+                if (response.isSuccessful && response.body()?.success == true) {
+                    runOnUiThread {
+                        setFollowUi(true)
+                        // Update the follower count display
+                        val currentCount = followersCount.text.toString().toIntOrNull() ?: 0
+                        followersCount.text = (currentCount + 1).toString()
+                        Toast.makeText(this@ProfileActivity, "Followed", Toast.LENGTH_SHORT).show()
 
-        // Add to current user's following
-        val followingRef = db.collection("users").document(currentUid)
-            .collection("following").document(targetUserId)
-        batch.set(followingRef, mapOf("since" to now))
-
-        // Update counts
-        val currentUserRef = db.collection("users").document(currentUid)
-        batch.update(currentUserRef, "followingCount", FieldValue.increment(1))
-
-        val targetUserRef = db.collection("users").document(targetUserId)
-        batch.update(targetUserRef, "followersCount", FieldValue.increment(1))
-
-        batch.commit()
-            .addOnSuccessListener {
-                setFollowUi(true)
-                Toast.makeText(this, "Followed", Toast.LENGTH_SHORT).show()
-
-                // Create notification request for the follow action
-                createFollowNotification()
-            }
-            .addOnFailureListener { e ->
+                        // Create notification request for the follow action (still using Firebase)
+                        createFollowNotification()
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@ProfileActivity,
+                            "Failed to follow: ${response.body()?.error ?: "unknown error"}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
                 Log.e(TAG, "Failed to follow", e)
-                Toast.makeText(
-                    this,
-                    "Failed to follow: ${e.message ?: "unknown error"}",
-                    Toast.LENGTH_LONG
-                ).show()
+                runOnUiThread {
+                    Toast.makeText(
+                        this@ProfileActivity,
+                        "Failed to follow: ${e.message ?: "unknown error"}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
+        }
     }
 
     private fun createFollowNotification() {
@@ -516,53 +499,44 @@ class ProfileActivity : AppCompatActivity() {
             }
     }
 
-
     private fun unfollowUser() {
         if (currentUid.isBlank() || currentUid == targetUserId) return
 
-        val batch = db.batch()
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@ProfileActivity).getAuthToken()}"
+                val request = com.example.a22i1066_b_socially.network.FollowRequest(targetUserId)
+                val response = RetrofitClient.instance.unfollowUser(token, request)
 
-        // Remove from target user's followers
-        val followerRef = db.collection("users").document(targetUserId)
-            .collection("followers").document(currentUid)
-        batch.delete(followerRef)
-
-        // Remove from current user's following
-        val followingRef = db.collection("users").document(currentUid)
-            .collection("following").document(targetUserId)
-        batch.delete(followingRef)
-
-        // Update counts
-        val currentUserRef = db.collection("users").document(currentUid)
-        batch.update(
-            currentUserRef,
-            "followingCount",
-            com.google.firebase.firestore.FieldValue.increment(-1)
-        )
-
-        val targetUserRef = db.collection("users").document(targetUserId)
-        batch.update(
-            targetUserRef,
-            "followersCount",
-            com.google.firebase.firestore.FieldValue.increment(-1)
-        )
-
-        batch.commit()
-            .addOnSuccessListener {
-                setFollowUi(false)
-                // Don't manually update the count - let the profileListener handle it
-                Toast.makeText(this, "Unfollowed", Toast.LENGTH_SHORT).show()
-            }
-            .addOnFailureListener { e ->
+                if (response.isSuccessful && response.body()?.success == true) {
+                    runOnUiThread {
+                        setFollowUi(false)
+                        // Update the follower count display
+                        val currentCount = followersCount.text.toString().toIntOrNull() ?: 0
+                        followersCount.text = maxOf(0, currentCount - 1).toString()
+                        Toast.makeText(this@ProfileActivity, "Unfollowed", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@ProfileActivity,
+                            "Failed to unfollow: ${response.body()?.error ?: "unknown error"}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
                 Log.e(TAG, "Failed to unfollow", e)
-                Toast.makeText(
-                    this,
-                    "Failed to unfollow: ${e.message ?: "unknown error"}",
-                    Toast.LENGTH_LONG
-                ).show()
+                runOnUiThread {
+                    Toast.makeText(
+                        this@ProfileActivity,
+                        "Failed to unfollow: ${e.message ?: "unknown error"}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
+        }
     }
-
 
     private fun openMessages() {
         if (currentUid.isBlank()) {
@@ -580,25 +554,39 @@ class ProfileActivity : AppCompatActivity() {
     }
 
     private fun copyEmailToClipboard() {
-        db.collection("users").document(targetUserId).get()
-            .addOnSuccessListener { doc ->
-                val email = doc.getString("email")?.takeIf { it.isNotBlank() }
-                    ?: doc.getString("userEmail")?.takeIf { it.isNotBlank() }
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserProfile(
+                    userId = targetUserId,
+                    currentUserId = currentUid
+                )
 
-                if (email.isNullOrBlank()) {
-                    Toast.makeText(this, "No email available", Toast.LENGTH_SHORT).show()
-                    return@addOnSuccessListener
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val email = response.body()?.user?.email?.takeIf { it.isNotBlank() }
+
+                    runOnUiThread {
+                        if (email.isNullOrBlank()) {
+                            Toast.makeText(this@ProfileActivity, "No email available", Toast.LENGTH_SHORT).show()
+                            return@runOnUiThread
+                        }
+
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("email", email)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(this@ProfileActivity, "Email copied to clipboard", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this@ProfileActivity, "Failed to get email", Toast.LENGTH_SHORT).show()
+                    }
                 }
-
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("email", email)
-                clipboard.setPrimaryClip(clip)
-                Toast.makeText(this, "Email copied to clipboard", Toast.LENGTH_SHORT).show()
-            }
-            .addOnFailureListener { e ->
+            } catch (e: Exception) {
                 Log.e(TAG, "Failed to get email", e)
-                Toast.makeText(this, "Failed to get email", Toast.LENGTH_SHORT).show()
+                runOnUiThread {
+                    Toast.makeText(this@ProfileActivity, "Failed to get email", Toast.LENGTH_SHORT).show()
+                }
             }
+        }
     }
 
     private fun addContact() {
@@ -618,7 +606,6 @@ class ProfileActivity : AppCompatActivity() {
                 when (which) {
                     0 -> Toast.makeText(this, "Block feature coming soon", Toast.LENGTH_SHORT)
                         .show()
-
                     1 -> Toast.makeText(this, "Report feature coming soon", Toast.LENGTH_SHORT)
                         .show()
                 }
@@ -634,14 +621,13 @@ class ProfileActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        profileListener?.remove()
-        profileListener = null
-        postsListener?.remove()
-        postsListener = null
-        highlightsListener?.remove()
-        highlightsListener = null
+        // Clean up Firebase Realtime Database listener for online status
         profileStatusRef?.let { r -> profileStatusListener?.let { r.removeEventListener(it) } }
         profileStatusRef = null
         profileStatusListener = null
+        // Note: We no longer use Firestore listeners for profile data
+        highlightsListener?.remove()
+        highlightsListener = null
     }
 }
+

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Post Creation</title>
+</head>
+<body>
+    <h1>Testing Post Creation Endpoint</h1>
+    <button onclick="testCreatePost()">Test Create Post</button>
+    <pre id="result"></pre>
+
+    <script>
+    async function testCreatePost() {
+        const resultDiv = document.getElementById('result');
+        resultDiv.textContent = 'Testing...';
+
+        try {
+            // Get your auth token from SessionStorage or enter it here
+            const token = 'Bearer YOUR_TOKEN_HERE'; // Replace with real token
+
+            const postData = {
+                postId: 'test_' + Date.now(),
+                caption: 'Test post',
+                imageUrls: ['http://192.168.18.55/backend/uploads/test.jpg'],
+                timestamp: Date.now()
+            };
+
+            const response = await fetch('http://192.168.18.55/backend/api/posts.php?action=create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': token
+                },
+                body: JSON.stringify(postData)
+            });
+
+            // Get raw response text first
+            const rawText = await response.text();
+            resultDiv.textContent = 'Status: ' + response.status + '\n\n';
+            resultDiv.textContent += 'Raw Response:\n' + rawText + '\n\n';
+
+            // Try to parse as JSON
+            try {
+                const json = JSON.parse(rawText);
+                resultDiv.textContent += 'Parsed JSON:\n' + JSON.stringify(json, null, 2);
+            } catch (e) {
+                resultDiv.textContent += 'ERROR: Response is not valid JSON!\n';
+                resultDiv.textContent += 'Parse error: ' + e.message;
+            }
+        } catch (error) {
+            resultDiv.textContent = 'Request failed: ' + error.message;
+        }
+    }
+    </script>
+</body>
+</html>
+

@@ -96,8 +96,31 @@ data class DeleteMessageRequest(
 
 data class SimpleResponse(
     val success: Boolean,
-    val error: String?
+    val error: String?,
+    val message: String? = null
 )
+
+data class FollowStatusResponse(
+    val success: Boolean,
+    val isFollowing: Boolean = false,
+    val error: String? = null
+)
+
+data class FollowRequest(
+    val targetUserId: String
+)
+
+data class UpdateProfileRequest(
+    val displayName: String? = null,
+    val firstName: String? = null,
+    val lastName: String? = null,
+    val bio: String? = null,
+    val title: String? = null,
+    val threadsUsername: String? = null,
+    val website: String? = null,
+    val profilePicUrl: String? = null
+)
+
 interface ApiService {
     @GET("test.php")
     suspend fun testConnection(): Response<TestResponse>
@@ -117,8 +140,33 @@ interface ApiService {
     @GET("user.php")
     suspend fun getUserProfile(
         @Query("action") action: String = "profile",
-        @Query("userId") userId: String
+        @Query("userId") userId: String,
+        @Query("currentUserId") currentUserId: String = ""
     ): Response<UserProfileResponse>
+
+    @GET("user.php?action=checkFollow")
+    suspend fun checkFollowStatus(
+        @Header("Authorization") token: String,
+        @Query("targetUserId") targetUserId: String
+    ): Response<FollowStatusResponse>
+
+    @POST("user.php?action=follow")
+    suspend fun followUser(
+        @Header("Authorization") token: String,
+        @Body request: FollowRequest
+    ): Response<SimpleResponse>
+
+    @POST("user.php?action=unfollow")
+    suspend fun unfollowUser(
+        @Header("Authorization") token: String,
+        @Body request: FollowRequest
+    ): Response<SimpleResponse>
+
+    @POST("user.php?action=updateProfile")
+    suspend fun updateProfile(
+        @Header("Authorization") token: String,
+        @Body request: UpdateProfileRequest
+    ): Response<SimpleResponse>
 
     @GET("users.php?action=getAll")
     suspend fun getAllUsers(

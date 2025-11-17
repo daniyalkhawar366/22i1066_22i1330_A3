@@ -11,10 +11,13 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
 import com.bumptech.glide.signature.ObjectKey
+import com.example.a22i1066_b_socially.network.RetrofitClient
+import com.example.a22i1066_b_socially.network.UpdateProfileRequest
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -24,7 +27,6 @@ import java.io.IOException
 class EditProfileActivity : AppCompatActivity() {
 
     private val auth = FirebaseAuth.getInstance()
-    private val db = FirebaseFirestore.getInstance()
 
     private lateinit var closeBtn: TextView
     private lateinit var saveBtn: TextView
@@ -77,7 +79,7 @@ class EditProfileActivity : AppCompatActivity() {
         val uid = auth.currentUser?.uid
         if (uid.isNullOrBlank()) {
             Toast.makeText(this, "Not signed in", Toast.LENGTH_SHORT).show()
-            setResult(Activity.RESULT_CANCELED)
+            setResult(RESULT_CANCELED)
             finish()
             return
         }
@@ -85,45 +87,14 @@ class EditProfileActivity : AppCompatActivity() {
         editEmail.setText(auth.currentUser?.email ?: "")
         editEmail.isEnabled = false
 
-        db.collection("users").document(uid).get()
-            .addOnSuccessListener { doc ->
-                val first = doc.getString("firstName").orEmpty().trim()
-                val last = doc.getString("lastName").orEmpty().trim()
-                val combined = listOf(first, last).filter { it.isNotEmpty() }.joinToString(" ")
-                if (combined.isNotEmpty()) {
-                    editName.setText(combined)
-                } else {
-                    editName.setText(doc.getString("displayName").orEmpty())
-                }
-
-                editUsername.setText(doc.getString("username").orEmpty())
-                editWebsite.setText(doc.getString("website").orEmpty())
-                editBio.setText(doc.getString("bio").orEmpty())
-
-                val pic = doc.getString("profilePicUrl").orEmpty()
-                if (pic.isNotBlank()) {
-                    Glide.with(this).load(pic).circleCrop()
-                        .signature(ObjectKey(System.currentTimeMillis().toString()))
-                        .into(imgEdit)
-                } else {
-                    imgEdit.setImageResource(R.drawable.profileicon)
-                }
-
-                progressView.visibility = View.GONE
-                contentScroll.visibility = View.VISIBLE
-            }
-            .addOnFailureListener { e ->
-                progressView.visibility = View.GONE
-                contentScroll.visibility = View.VISIBLE
-                Log.e(TAG, "Failed to load profile doc", e)
-                Toast.makeText(this, "Failed to load profile", Toast.LENGTH_SHORT).show()
-            }
+        // Load profile from PHP backend
+        loadProfileFromBackend(uid)
 
         imgEdit.setOnClickListener { pickLauncher.launch("image/*") }
         changePhoto.setOnClickListener { pickLauncher.launch("image/*") }
 
         closeBtn.setOnClickListener {
-            setResult(Activity.RESULT_CANCELED)
+            setResult(RESULT_CANCELED)
             finish()
         }
 
@@ -133,11 +104,75 @@ class EditProfileActivity : AppCompatActivity() {
             val currentUid = auth.currentUser?.uid
             if (currentUid == null) {
                 Toast.makeText(this, "Not signed in", Toast.LENGTH_SHORT).show()
-                setResult(Activity.RESULT_CANCELED)
+                setResult(RESULT_CANCELED)
                 finish()
                 return@setOnClickListener
             }
             saveProfile(currentUid)
+        }
+    }
+
+    private fun loadProfileFromBackend(uid: String) {
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserProfile(
+                    userId = uid,
+                    currentUserId = uid
+                )
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val user = response.body()?.user
+                    if (user == null) {
+                        runOnUiThread {
+                            progressView.visibility = View.GONE
+                            contentScroll.visibility = View.VISIBLE
+                            Toast.makeText(this@EditProfileActivity, "User not found", Toast.LENGTH_SHORT).show()
+                        }
+                        return@launch
+                    }
+
+                    runOnUiThread {
+                        val first = user.firstName.trim()
+                        val last = user.lastName.trim()
+                        val combined = listOf(first, last).filter { it.isNotEmpty() }.joinToString(" ")
+                        if (combined.isNotEmpty()) {
+                            editName.setText(combined)
+                        } else {
+                            editName.setText(user.displayName)
+                        }
+
+                        editUsername.setText(user.username)
+                        editWebsite.setText(user.website)
+                        editBio.setText(user.bio)
+
+                        val pic = user.profilePicUrl
+                        if (pic.isNotBlank()) {
+                            Glide.with(this@EditProfileActivity).load(pic).circleCrop()
+                                .signature(ObjectKey(System.currentTimeMillis().toString()))
+                                .into(imgEdit)
+                        } else {
+                            imgEdit.setImageResource(R.drawable.profileicon)
+                        }
+
+                        progressView.visibility = View.GONE
+                        contentScroll.visibility = View.VISIBLE
+                    }
+                } else {
+                    runOnUiThread {
+                        progressView.visibility = View.GONE
+                        contentScroll.visibility = View.VISIBLE
+                        Log.e(TAG, "Failed to load profile: ${response.body()?.error}")
+                        Toast.makeText(this@EditProfileActivity, "Failed to load profile", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading profile", e)
+                runOnUiThread {
+                    progressView.visibility = View.GONE
+                    contentScroll.visibility = View.VISIBLE
+                    Toast.makeText(this@EditProfileActivity, "Error loading profile: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
@@ -147,18 +182,8 @@ class EditProfileActivity : AppCompatActivity() {
         val firstName = parts.getOrNull(0).orEmpty()
         val lastName = parts.getOrNull(1).orEmpty()
 
-        val username = editUsername.text.toString().trim()
         val website = editWebsite.text.toString().trim()
         val bio = editBio.text.toString().trim()
-
-        val updates = mutableMapOf<String, Any>(
-            "firstName" to firstName,
-            "lastName" to lastName,
-            "displayName" to nameRaw,
-            "username" to username,
-            "website" to website,
-            "bio" to bio
-        )
 
         val uri = selectedUri
         if (uri != null) {
@@ -225,8 +250,7 @@ class EditProfileActivity : AppCompatActivity() {
                                 return
                             }
 
-                            updates["profilePicUrl"] = secureUrl
-                            performFirestoreUpdate(uid, updates)
+                            performBackendUpdate(uid, firstName, lastName, nameRaw, website, bio, secureUrl)
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to parse Cloudinary response", e)
                             runOnUiThread {
@@ -239,28 +263,67 @@ class EditProfileActivity : AppCompatActivity() {
                 }
             })
         } else {
-            performFirestoreUpdate(uid, updates)
+            performBackendUpdate(uid, firstName, lastName, nameRaw, website, bio, null)
         }
     }
 
-    private fun performFirestoreUpdate(uid: String, updates: Map<String, Any>) {
-        Log.d(TAG, "Updating Firestore for $uid with $updates")
-        db.collection("users").document(uid).update(updates)
-            .addOnSuccessListener {
-                Log.d(TAG, "Firestore update successful")
-                runOnUiThread {
-                    Toast.makeText(this, "Profile updated", Toast.LENGTH_SHORT).show()
-                    setResult(Activity.RESULT_OK)
-                    finish()
+    private fun performBackendUpdate(
+        uid: String,
+        firstName: String,
+        lastName: String,
+        displayName: String,
+        website: String,
+        bio: String,
+        profilePicUrl: String?
+    ) {
+        Log.d(TAG, "Updating profile via backend for $uid")
+
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@EditProfileActivity).getAuthToken()}"
+                val request = UpdateProfileRequest(
+                    displayName = displayName,
+                    firstName = firstName,
+                    lastName = lastName,
+                    bio = bio,
+                    website = website,
+                    profilePicUrl = profilePicUrl
+                )
+
+                val response = RetrofitClient.instance.updateProfile(token, request)
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    Log.d(TAG, "Profile update successful")
+                    runOnUiThread {
+                        Toast.makeText(this@EditProfileActivity, "Profile updated", Toast.LENGTH_SHORT).show()
+                        setResult(RESULT_OK)
+                        finish()
+                    }
+                } else {
+                    Log.e(TAG, "Profile update failed: ${response.body()?.error}")
+                    runOnUiThread {
+                        progressView.visibility = View.GONE
+                        saveBtn.isEnabled = true
+                        Toast.makeText(
+                            this@EditProfileActivity,
+                            "Failed to save: ${response.body()?.error ?: "Unknown error"}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Firestore update failed", e)
+            } catch (e: Exception) {
+                Log.e(TAG, "Profile update failed", e)
                 runOnUiThread {
                     progressView.visibility = View.GONE
                     saveBtn.isEnabled = true
-                    Toast.makeText(this, "Failed to save: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        this@EditProfileActivity,
+                        "Failed to save: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
+        }
     }
 }
+
