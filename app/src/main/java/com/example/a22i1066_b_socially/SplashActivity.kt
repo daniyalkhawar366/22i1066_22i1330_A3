@@ -6,7 +6,6 @@ import android.os.Looper
 import android.widget.ProgressBar
 import androidx.appcompat.app.AppCompatActivity
 import android.content.Intent
-import com.google.firebase.auth.FirebaseAuth
 
 class SplashActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
@@ -31,11 +30,12 @@ class SplashActivity : AppCompatActivity() {
                 if (progress < 100) {
                     handler.postDelayed(this, duration / 100)
                 } else {
-                    val currentUser = FirebaseAuth.getInstance().currentUser
-                    val nextActivity = if (currentUser != null) {
+                    // Check if user is logged in using SessionManager
+                    val sessionManager = SessionManager(this@SplashActivity)
+                    val nextActivity = if (sessionManager.isLoggedIn()) {
                         FYPActivity::class.java
                     } else {
-                        LoginActivity::class.java
+                        MainActivity::class.java
                     }
                     startActivity(Intent(this@SplashActivity, nextActivity))
                     finish()

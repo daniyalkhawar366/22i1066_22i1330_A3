@@ -181,7 +181,7 @@ class SignupActivity : AppCompatActivity() {
 
                 val username = if (usernameInput.isNotBlank()) usernameInput else email.substringBefore("@")
 
-                Log.d(TAG, "Creating account for: $email")
+                Log.d(TAG, "Creating account for: $email, username: $username")
 
                 val response = RetrofitClient.instance.signup(
                     SignupRequest(
@@ -195,20 +195,30 @@ class SignupActivity : AppCompatActivity() {
                     )
                 )
 
+                Log.d(TAG, "Signup response code: ${response.code()}")
+                Log.d(TAG, "Response successful: ${response.isSuccessful}")
+
                 if (response.isSuccessful && response.body()?.success == true) {
                     val token = response.body()?.token ?: ""
                     val userId = response.body()?.userId ?: ""
 
+                    Log.d(TAG, "Signup successful! UserId: $userId")
                     sessionManager.saveAuthToken(token, userId)
 
                     runOnUiThread {
                         Toast.makeText(this@SignupActivity, "Account Created!", Toast.LENGTH_SHORT).show()
-                        startActivity(Intent(this@SignupActivity, FYPActivity::class.java))
+                        val intent = Intent(this@SignupActivity, FYPActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        startActivity(intent)
                         finish()
                     }
                 } else {
-                    val error = response.body()?.error ?: response.errorBody()?.string() ?: "Signup failed"
-                    Log.e(TAG, "Signup failed: $error")
+                    val errorBody = response.errorBody()?.string()
+                    val error = response.body()?.error ?: errorBody ?: "Signup failed"
+                    Log.e(TAG, "Signup failed!")
+                    Log.e(TAG, "Response code: ${response.code()}")
+                    Log.e(TAG, "Error body: $errorBody")
+                    Log.e(TAG, "Response body: ${response.body()}")
                     showError(error)
                 }
             } catch (e: Exception) {

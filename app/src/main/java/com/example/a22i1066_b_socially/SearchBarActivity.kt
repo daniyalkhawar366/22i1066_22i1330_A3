@@ -6,20 +6,21 @@ import android.os.Handler
 import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import com.example.a22i1066_b_socially.network.RetrofitClient
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.launch
 
 class SearchBarActivity : AppCompatActivity() {
-    private val db = FirebaseFirestore.getInstance()
-    private val auth = FirebaseAuth.getInstance()
+    private val TAG = "SearchBarActivity"
     private lateinit var searchInput: EditText
     private lateinit var clearBtn: TextView
     private lateinit var recycler: RecyclerView
@@ -85,48 +86,43 @@ class SearchBarActivity : AppCompatActivity() {
             return
         }
 
-        val limit = 200L
-        val currentUserId = auth.currentUser?.uid ?: ""
-        val qLower = q.lowercase()
+        Log.d(TAG, "Performing search for: $q")
 
-        db.collection("users").limit(limit).get()
-            .addOnSuccessListener { snap ->
-                val results = mutableListOf<SearchUser>()
-                for (doc in snap.documents) {
-                    val id = doc.id
-                    if (id == currentUserId) continue
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@SearchBarActivity).getAuthToken()}"
+                val response = RetrofitClient.instance.searchUsers(token, q, 200)
 
-                    val username = (doc.getString("username") ?: "").trim()
-                    if (username.isEmpty()) continue
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val usersData = response.body()?.users ?: emptyList()
+                    Log.d(TAG, "Search found ${usersData.size} users")
 
-                    val bio = doc.getString("bio") ?: ""
-                    val first = doc.getString("firstName").orEmpty().trim()
-                    val last = doc.getString("lastName").orEmpty().trim()
-                    val display = listOf(first, last).filter { it.isNotEmpty() }.joinToString(" ")
-                        .ifEmpty { doc.getString("displayName").orEmpty() }
-
-                    val pic = doc.getString("profilePicUrl")
-                        ?: doc.getString("profilePic")
-                        ?: doc.getString("photoUrl")
-                        ?: ""
-
-                    if (username.lowercase().contains(qLower) || display.lowercase().contains(qLower)) {
-                        results.add(
-                            SearchUser(
-                                id = id,
-                                username = username,
-                                subtitle = bio,
-                                displayName = display,
-                                profilePicUrl = pic
-                            )
+                    val results = usersData.map { userItem ->
+                        SearchUser(
+                            id = userItem.id,
+                            username = userItem.username,
+                            displayName = userItem.displayName,
+                            subtitle = userItem.subtitle,
+                            profilePicUrl = userItem.profilePicUrl
                         )
                     }
+
+                    runOnUiThread {
+                        adapter.updateList(results)
+                    }
+                } else {
+                    Log.e(TAG, "Search failed: ${response.errorBody()?.string()}")
+                    runOnUiThread {
+                        adapter.updateList(emptyList())
+                    }
                 }
-                adapter.updateList(results)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error performing search", e)
+                runOnUiThread {
+                    adapter.updateList(emptyList())
+                }
             }
-            .addOnFailureListener {
-                adapter.updateList(emptyList())
-            }
+        }
     }
 
     private fun loadRecentSearches() {
@@ -139,9 +135,57 @@ class SearchBarActivity : AppCompatActivity() {
         try {
             val type = object : TypeToken<List<SearchUser>>() {}.type
             val recentUsers: List<SearchUser> = Gson().fromJson(json, type)
-            adapter.updateList(recentUsers)
+
+            // Validate users exist in database and remove deleted ones
+            validateRecentSearches(recentUsers)
         } catch (e: Exception) {
             adapter.updateList(emptyList())
+        }
+    }
+
+    private fun validateRecentSearches(recentUsers: List<SearchUser>) {
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@SearchBarActivity).getAuthToken()}"
+
+                // Get user IDs from recent searches
+                val userIds = recentUsers.map { it.id }
+
+                // Fetch current users from database to validate
+                val validUsers = mutableListOf<SearchUser>()
+
+                for (user in recentUsers) {
+                    // Quick validation - search for this specific user
+                    val response = RetrofitClient.instance.searchUsers(token, user.username, 1)
+
+                    if (response.isSuccessful && response.body()?.success == true) {
+                        val users = response.body()?.users ?: emptyList()
+                        // Check if this user still exists in the database
+                        val exists = users.any { it.id == user.id }
+                        if (exists) {
+                            validUsers.add(user)
+                        }
+                    }
+                }
+
+                // Update stored recent searches with only valid users
+                if (validUsers.size != recentUsers.size) {
+                    val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    val newJson = Gson().toJson(validUsers)
+                    prefs.edit().putString(KEY_RECENT_SEARCHES, newJson).apply()
+                    Log.d(TAG, "Cleaned ${recentUsers.size - validUsers.size} deleted users from search history")
+                }
+
+                runOnUiThread {
+                    adapter.updateList(validUsers)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error validating recent searches", e)
+                // On error, show the original list
+                runOnUiThread {
+                    adapter.updateList(recentUsers)
+                }
+            }
         }
     }
 

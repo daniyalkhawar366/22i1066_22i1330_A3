@@ -230,6 +230,14 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Body request: DeletePostRequest
     ): Response<SimpleResponse>
+
+    // Search endpoint
+    @GET("search.php?action=search")
+    suspend fun searchUsers(
+        @Header("Authorization") token: String,
+        @Query("query") query: String,
+        @Query("limit") limit: Int = 200
+    ): Response<SearchUsersResponse>
 }
 
 // Post-related data classes
@@ -309,5 +317,20 @@ data class CommentsResponse(
 
 data class DeletePostRequest(
     val postId: String
+)
+
+// Search-related data classes
+data class SearchUserItem(
+    val id: String,
+    val username: String,
+    val displayName: String?,
+    val subtitle: String?,
+    val profilePicUrl: String?
+)
+
+data class SearchUsersResponse(
+    val success: Boolean,
+    val users: List<SearchUserItem>?,
+    val error: String?
 )
 

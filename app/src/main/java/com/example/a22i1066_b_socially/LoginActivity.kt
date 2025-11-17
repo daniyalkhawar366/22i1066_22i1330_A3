@@ -2,6 +2,7 @@ package com.example.a22i1066_b_socially
 
 import android.content.Intent
 import android.os.Bundle
+import android.text.InputType
 import androidx.appcompat.app.AppCompatActivity
 import android.widget.Button
 import android.widget.EditText
@@ -10,14 +11,16 @@ import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import com.example.a22i1066_b_socially.network.RetrofitClient
 import kotlinx.coroutines.launch
-import kotlin.or
 
 class LoginActivity : AppCompatActivity() {
     private lateinit var ivBackArrow: ImageView
     private lateinit var btnLogin: Button
     private lateinit var etEmail: EditText
     private lateinit var etPassword: EditText
+    private lateinit var ivTogglePassword: ImageView
     private lateinit var sessionManager: SessionManager
+
+    private var isPasswordVisible = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,6 +32,7 @@ class LoginActivity : AppCompatActivity() {
         etEmail = findViewById(R.id.etEmail)
         etPassword = findViewById(R.id.etPassword)
         btnLogin = findViewById(R.id.btnLogin)
+        ivTogglePassword = findViewById(R.id.ivTogglePassword)
 
         val signupButton = findViewById<Button>(R.id.signup_button)
         signupButton.setOnClickListener {
@@ -38,6 +42,17 @@ class LoginActivity : AppCompatActivity() {
         ivBackArrow.setOnClickListener {
             startActivity(Intent(this, MainActivity::class.java))
             finish()
+        }
+
+        // Password visibility toggle
+        ivTogglePassword.setOnClickListener {
+            isPasswordVisible = !isPasswordVisible
+            etPassword.inputType = if (isPasswordVisible) {
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            } else {
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            }
+            etPassword.setSelection(etPassword.text.length)
         }
 
         btnLogin.setOnClickListener {

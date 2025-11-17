@@ -54,23 +54,41 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Password Input Field -->
-    <EditText
-        android:id="@+id/etPassword"
+    <!-- Password Input Field with Toggle -->
+    <RelativeLayout
+        android:id="@+id/passwordContainer"
         android:layout_width="0dp"
         android:layout_height="50dp"
         android:layout_marginTop="16dp"
-        android:hint="Password"
-        android:textColorHint="#CCCCCC"
-        android:textColor="#333333"
-        android:textSize="16sp"
-        android:fontFamily="sans-serif"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:inputType="textPassword"
         app:layout_constraintTop_toBottomOf="@id/etEmail"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <EditText
+            android:id="@+id/etPassword"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:hint="Password"
+            android:textColorHint="#CCCCCC"
+            android:textColor="#333333"
+            android:textSize="16sp"
+            android:fontFamily="sans-serif"
+            android:paddingStart="16dp"
+            android:paddingEnd="48dp"
+            android:inputType="textPassword" />
+
+        <ImageView
+            android:id="@+id/ivTogglePassword"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="12dp"
+            android:src="@android:drawable/ic_menu_view"
+            android:contentDescription="Toggle password visibility"
+            android:background="?android:attr/selectableItemBackground"
+            android:padding="4dp" />
+    </RelativeLayout>
 
     <!-- Forgot Password -->
     <TextView
@@ -84,7 +102,7 @@
         android:fontFamily="sans-serif"
         android:padding="8dp"
         android:background="?android:attr/selectableItemBackground"
-        app:layout_constraintTop_toBottomOf="@id/etPassword"
+        app:layout_constraintTop_toBottomOf="@id/passwordContainer"
         app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- Log in Button -->
