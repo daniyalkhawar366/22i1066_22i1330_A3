@@ -4,8 +4,8 @@ header('Content-Type: text/plain');
 
 $url = 'http://192.168.18.55/backend/api/auth.php?action=login';
 $data = json_encode([
-    'email' => 'test@example.com',
-    'password' => 'testpassword'
+    'email' => 'daniyalkhawar41@gmail.com',
+    'password' => 'Root@pass1'
 ]);
 
 $ch = curl_init($url);

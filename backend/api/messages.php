@@ -106,13 +106,35 @@ try {
                     $isOnline = ($currentTime - $lastSeenTime) < 300; // 5 minutes
                 }
 
+                // Format last message preview
+                $lastMessageText = $row['text'] ?? '';
+                $messageType = $row['type'] ?? 'text';
+                $senderId = $row['sender_id'] ?? '';
+
+                // For image messages, show "Image" or "You: Image"
+                if ($messageType === 'image' || (!empty($row['image_urls']) && $row['image_urls'] !== '[]')) {
+                    if ($senderId === $currentUserId) {
+                        $lastMessageText = 'You: Image';
+                    } else {
+                        $lastMessageText = 'Image';
+                    }
+                } elseif ($messageType === 'call') {
+                    // Keep call messages as is
+                    $lastMessageText = $row['text'] ?? '';
+                } else {
+                    // For text messages, add "You: " prefix if sent by current user
+                    if ($senderId === $currentUserId && !empty($lastMessageText)) {
+                        $lastMessageText = 'You: ' . $lastMessageText;
+                    }
+                }
+
                 $chats[] = [
                     'chatId' => $chatId,
                     'otherUserId' => $otherUser['id'],
                     'otherUsername' => $otherUser['username'] ?? '',
                     'otherProfilePic' => $otherUser['profile_pic_url'] ?? '',
-                    'lastMessage' => $row['text'] ?? '',
-                    'lastMessageType' => $row['type'] ?? 'text',
+                    'lastMessage' => $lastMessageText,
+                    'lastMessageType' => $messageType,
                     'lastTimestamp' => (int)$row['timestamp'],
                     'unreadCount' => 0,
                     'isOnline' => $isOnline

@@ -102,4 +102,18 @@ CREATE TABLE post_comments (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_post_timestamp (post_id, timestamp)
 );
+CREATE TABLE IF NOT EXISTS calls (
+    id VARCHAR(255) PRIMARY KEY,
+    channel_name VARCHAR(255) NOT NULL,
+    caller_id VARCHAR(255) NOT NULL,
+    receiver_id VARCHAR(255) NOT NULL,
+    call_type ENUM('voice', 'video') NOT NULL,
+    status ENUM('ringing', 'accepted', 'rejected', 'ended', 'missed') DEFAULT 'ringing',
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ended_at TIMESTAMP NULL,
+    INDEX idx_caller (caller_id),
+    INDEX idx_receiver (receiver_id),
+    INDEX idx_status (status)
+);
+
 

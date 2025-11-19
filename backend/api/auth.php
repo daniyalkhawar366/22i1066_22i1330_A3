@@ -138,7 +138,7 @@ if ($method === 'POST' && $action === 'login') {
     try {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
-
+        
         error_log("Login attempt for email: " . ($data['email'] ?? 'none'));
 
         if (empty($data['email']) || empty($data['password'])) {
@@ -159,7 +159,7 @@ if ($method === 'POST' && $action === 'login') {
         }
 
         $token = generateJWT($user['id']);
-
+        
         error_log("Login successful for: " . $data['email']);
 
         $response = [
@@ -168,7 +168,7 @@ if ($method === 'POST' && $action === 'login') {
             'userId' => $user['id'],
             'username' => $user['username']
         ];
-
+        
         echo json_encode($response);
         exit();
 

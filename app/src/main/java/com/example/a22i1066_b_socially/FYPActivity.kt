@@ -39,6 +39,8 @@ class FYPActivity : AppCompatActivity() {
     private lateinit var adapter: PostAdapter
     private val posts = mutableListOf<Post>()
 
+    private var isPollingIncomingCalls = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -78,6 +80,56 @@ class FYPActivity : AppCompatActivity() {
         loadCurrentUserProfile()
         fetchAndDisplayStories()
         loadPosts()
+
+        // Start polling for incoming calls
+        startIncomingCallPolling()
+    }
+
+    private fun startIncomingCallPolling() {
+        isPollingIncomingCalls = true
+        lifecycleScope.launch {
+            while (isPollingIncomingCalls) {
+                try {
+                    val sessionManager = SessionManager(this@FYPActivity)
+                    val token = sessionManager.getToken() ?: ""
+
+                    if (token.isNotBlank()) {
+                        val response = RetrofitClient.instance.pollIncomingCall("Bearer $token")
+
+                        if (response.isSuccessful && response.body()?.success == true) {
+                            val hasIncoming = response.body()?.hasIncomingCall ?: false
+
+                            if (hasIncoming) {
+                                val call = response.body()?.call
+                                if (call != null) {
+                                    // Show incoming call activity
+                                    val intent = Intent(this@FYPActivity, IncomingCallActivity::class.java).apply {
+                                        putExtra("CALL_ID", call.callId)
+                                        putExtra("CHAT_ID", call.channelName)
+                                        putExtra("CALLER_USER_ID", call.callerId)
+                                        putExtra("CALLER_USERNAME", call.callerUsername)
+                                        putExtra("CALLER_PROFILE_URL", call.callerProfileUrl)
+                                        putExtra("CURRENT_USER_ID", currentUserId)
+                                        putExtra("CALL_TYPE", call.callType)
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                    }
+                                    startActivity(intent)
+
+                                    // Stop polling temporarily while handling call
+                                    isPollingIncomingCalls = false
+                                    break
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error polling incoming calls", e)
+                }
+
+                // Poll every 2 seconds
+                kotlinx.coroutines.delay(2000)
+            }
+        }
     }
 
     private fun initializeViews() {
@@ -457,6 +509,16 @@ class FYPActivity : AppCompatActivity() {
         super.onResume()
         loadPosts()
         loadCurrentUserProfile()
+
+        // Restart polling if stopped
+        if (!isPollingIncomingCalls) {
+            startIncomingCallPolling()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        isPollingIncomingCalls = false
     }
 }
 

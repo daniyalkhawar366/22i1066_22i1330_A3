@@ -1,6 +1,7 @@
 package com.example.a22i1066_b_socially
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.net.Uri
@@ -74,6 +75,7 @@ class ChatDetailActivity : AppCompatActivity() {
     private val MAX_IMAGES = 10
     private var isUploadingImages = false
     private var isPolling = false
+    private var isPollingIncomingCalls = false
 
 
     private val imagePickerLauncher = registerForActivityResult(
@@ -161,11 +163,13 @@ class ChatDetailActivity : AppCompatActivity() {
         startScreenshotDetection()
         loadMessages()
         startPolling()
+        startIncomingCallPolling()
     }
 
     override fun onPause() {
         super.onPause()
         isPolling = false
+        isPollingIncomingCalls = false
     }
 
     private fun startPolling() {
@@ -530,23 +534,69 @@ class ChatDetailActivity : AppCompatActivity() {
             return
         }
 
-        val callTypeStr = requestedType
-        CallSession.start(requestedChatId, callTypeStr)
+        // Initiate call via PHP backend
+        lifecycleScope.launch {
+            try {
+                val token = sessionManager.getToken() ?: ""
+                val response = RetrofitClient.instance.initiateCall(
+                    "Bearer $token",
+                    com.example.a22i1066_b_socially.network.InitiateCallRequest(
+                        receiverId = receiverUserId,
+                        callType = requestedType
+                    )
+                )
 
-        val intent = if (isVideo) {
-            android.content.Intent(this, VideoCallActivity::class.java)
-        } else {
-            android.content.Intent(this, CallActivity::class.java)
-        }.apply {
-            putExtra("CHAT_ID", requestedChatId ?: "")
-            putExtra("RECEIVER_USER_ID", receiverUserId)
-            putExtra("RECEIVER_USERNAME", receiverUsername)
-            putExtra("RECEIVER_PROFILE_URL", receiverProfileUrl)
-            putExtra("CURRENT_USER_ID", currentUserId)
-            putExtra("CALL_TYPE", callTypeStr)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val callId = response.body()?.callId ?: ""
+                    val channelName = response.body()?.channelName ?: requestedChatId ?: ""
+
+                    CallSession.start(channelName, requestedType)
+
+                    // Use CallActivity for both audio and video calls
+                    val intent = android.content.Intent(this@ChatDetailActivity, CallActivity::class.java).apply {
+                        putExtra("CHAT_ID", channelName)
+                        putExtra("CALL_ID", callId)
+                        putExtra("RECEIVER_USER_ID", receiverUserId)
+                        putExtra("RECEIVER_USERNAME", receiverUsername)
+                        putExtra("RECEIVER_PROFILE_URL", receiverProfileUrl)
+                        putExtra("CURRENT_USER_ID", currentUserId)
+                        putExtra("CALL_TYPE", requestedType) // "audio" or "video"
+                    }
+
+                    startActivity(intent)
+                } else {
+                    // Check if user is offline
+                    val errorBody = response.body()
+                    if (errorBody?.isOnline == false) {
+                        val username = errorBody.username ?: receiverUsername
+                        runOnUiThread {
+                            Toast.makeText(
+                                this@ChatDetailActivity,
+                                "$username is offline",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    } else {
+                        runOnUiThread {
+                            Toast.makeText(
+                                this@ChatDetailActivity,
+                                "Failed to initiate call: ${errorBody?.error}",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initiating call", e)
+                runOnUiThread {
+                    Toast.makeText(
+                        this@ChatDetailActivity,
+                        "Network error: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
         }
-
-        startActivity(intent)
     }
 
 
@@ -563,6 +613,44 @@ class ChatDetailActivity : AppCompatActivity() {
         }
     }
 
+    private fun startIncomingCallPolling() {
+        isPollingIncomingCalls = true
+        lifecycleScope.launch {
+            while (isPollingIncomingCalls) {
+                try {
+                    val token = sessionManager.getToken() ?: ""
+                    if (token.isNotBlank()) {
+                        val response = RetrofitClient.instance.pollIncomingCall("Bearer $token")
+                        if (response.isSuccessful && response.body()?.success == true) {
+                            val hasIncoming = response.body()?.hasIncomingCall ?: false
+                            if (hasIncoming) {
+                                val call = response.body()?.call
+                                if (call != null) {
+                                    Log.d(TAG, "Incoming call detected: ${call.callerId}")
+                                    val intent = Intent(this@ChatDetailActivity, IncomingCallActivity::class.java)
+                                    intent.putExtra("CALL_ID", call.callId)
+                                    intent.putExtra("CHAT_ID", call.channelName)
+                                    intent.putExtra("CALLER_USER_ID", call.callerId)
+                                    intent.putExtra("CALLER_USERNAME", call.callerUsername)
+                                    intent.putExtra("CALLER_PROFILE_URL", call.callerProfileUrl)
+                                    intent.putExtra("CURRENT_USER_ID", currentUserId)
+                                    intent.putExtra("CALL_TYPE", call.callType)
+                                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                                    startActivity(intent)
+                                    isPollingIncomingCalls = false
+                                    break
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error polling incoming calls", e)
+                }
+                delay(2000)
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         screenshotObserver?.let {
@@ -573,5 +661,6 @@ class ChatDetailActivity : AppCompatActivity() {
             }
         }
         isPolling = false
+        isPollingIncomingCalls = false
     }
 }

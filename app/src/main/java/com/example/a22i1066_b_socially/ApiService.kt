@@ -126,6 +126,71 @@ data class UpdateProfileRequest(
     val profilePicUrl: String? = null
 )
 
+// Call-related data classes
+data class InitiateCallRequest(
+    val receiverId: String,
+    val callType: String // "voice" or "video"
+)
+
+data class InitiateCallResponse(
+    val success: Boolean,
+    val callId: String?,
+    val channelName: String?,
+    val isOnline: Boolean?,
+    val username: String?,
+    val error: String?
+)
+
+data class UpdateCallStatusRequest(
+    val callId: String,
+    val status: String // "accepted", "rejected", "ended", "missed"
+)
+
+data class CallLogRequest(
+    val receiverId: String,
+    val callType: String,
+    val duration: Long // in seconds
+)
+
+data class UserInfoResponse(
+    val success: Boolean,
+    val user: UserInfo?,
+    val error: String?
+)
+
+data class UserInfo(
+    val id: String,
+    val username: String,
+    val profile_pic_url: String?
+)
+
+data class CheckOnlineResponse(
+    val success: Boolean,
+    val isOnline: Boolean = false,
+    val error: String?
+)
+
+data class IncomingCallData(
+    val callId: String,
+    val channelName: String,
+    val callerId: String,
+    val callerUsername: String,
+    val callerProfileUrl: String?,
+    val callType: String
+)
+
+data class IncomingCallPollResponse(
+    val success: Boolean,
+    val hasIncomingCall: Boolean = false,
+    val call: IncomingCallData?,
+    val error: String?
+)
+
+data class CallStatusResponse(
+    val success: Boolean,
+    val status: String?
+)
+
 interface ApiService {
     @GET("test.php")
     suspend fun testConnection(): Response<TestResponse>
@@ -336,6 +401,48 @@ interface ApiService {
         @Query("query") query: String,
         @Query("limit") limit: Int = 200
     ): Response<SearchUsersResponse>
+
+    // Call endpoints
+    @POST("calls.php?action=initiate")
+    suspend fun initiateCall(
+        @Header("Authorization") token: String,
+        @Body request: InitiateCallRequest
+    ): Response<InitiateCallResponse>
+
+    @POST("calls.php?action=updateStatus")
+    suspend fun updateCallStatus(
+        @Header("Authorization") token: String,
+        @Body request: UpdateCallStatusRequest
+    ): Response<SimpleResponse>
+
+    @GET("calls.php?action=getUserInfo")
+    suspend fun getUserInfo(
+        @Header("Authorization") token: String,
+        @Query("userId") userId: String
+    ): Response<UserInfoResponse>
+
+    @POST("calls.php?action=logCall")
+    suspend fun logCall(
+        @Header("Authorization") token: String,
+        @Body request: CallLogRequest
+    ): Response<SimpleResponse>
+
+    @GET("calls.php?action=checkOnline")
+    suspend fun checkUserOnline(
+        @Header("Authorization") token: String,
+        @Query("userId") userId: String
+    ): Response<CheckOnlineResponse>
+
+    @GET("calls.php?action=pollIncomingCall")
+    suspend fun pollIncomingCall(
+        @Header("Authorization") token: String
+    ): Response<IncomingCallPollResponse>
+
+    @GET("calls.php?action=getCallStatus")
+    suspend fun getCallStatus(
+        @Header("Authorization") token: String,
+        @Query("callId") callId: String
+    ): Response<CallStatusResponse>
 }
 
 // Post-related data classes

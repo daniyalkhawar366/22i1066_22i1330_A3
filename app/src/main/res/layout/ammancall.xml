@@ -8,7 +8,39 @@
     android:background="#9A5A5B"
     tools:context=".VideoCallActivity">
 
-    <!-- Profile Image (Rounded Rectangle) -->
+    <!-- Remote Video Container (Full Screen) -->
+    <FrameLayout
+        android:id="@+id/remoteVideoContainer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#000000"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Local Video Container (Small Preview) -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/localVideoCard"
+        android:layout_width="120dp"
+        android:layout_height="160dp"
+        android:layout_margin="16dp"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="8dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <FrameLayout
+            android:id="@+id/localVideoContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#000000" />
+
+    </androidx.cardview.widget.CardView>
+
+    <!-- Profile Image (Rounded Rectangle) - Shown during audio call or before video connects -->
     <androidx.cardview.widget.CardView
         android:id="@+id/profileCard"
         android:layout_width="200dp"
@@ -25,8 +57,8 @@
             android:id="@+id/profileImage"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:src="@drawable/amman"
-            android:scaleType="centerCrop" />
+            android:scaleType="centerCrop"
+            android:contentDescription="@string/profile_picture" />
 
     </androidx.cardview.widget.CardView>
 
@@ -42,7 +74,31 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/profileCard">
 
+        <TextView
+            android:id="@+id/contactName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif"
+            android:text=""
+            android:textColor="#FFFFFF"
+            android:textSize="24sp"
+            android:textStyle="normal"/>
+
     </LinearLayout>
+
+    <!-- Call Status -->
+    <TextView
+        android:id="@+id/callStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:alpha="0.7"
+        android:text="@string/calling"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/nameLayout" />
 
     <!-- Call Duration -->
 
@@ -52,15 +108,15 @@
         android:id="@+id/callDuration"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="48dp"
+        android:layout_marginTop="12dp"
         android:alpha="0.8"
-        android:text="07:12"
+        android:text="@string/call_duration_default"
         android:textColor="#FFFFFF"
         android:textSize="18sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.504"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/nameLayout" />
+        app:layout_constraintTop_toBottomOf="@id/callStatus" />
 
     <LinearLayout
         android:id="@+id/controlButtonsLayout"
@@ -92,7 +148,8 @@
                 android:layout_height="28dp"
                 android:layout_gravity="center"
                 android:src="@drawable/comment"
-                android:tint="#FFFFFF" />
+                android:contentDescription="@string/chat"
+                app:tint="#FFFFFF" />
 
         </androidx.cardview.widget.CardView>
 
@@ -115,7 +172,8 @@
                 android:layout_height="32dp"
                 android:layout_gravity="center"
                 android:src="@drawable/telephone"
-                android:tint="#FFFFFF" />
+                android:contentDescription="@string/end_call"
+                app:tint="#FFFFFF" />
 
         </androidx.cardview.widget.CardView>
 
@@ -138,25 +196,13 @@
                 android:layout_height="28dp"
                 android:layout_gravity="center"
                 android:src="@drawable/volume"
-                android:tint="#FFFFFF" />
+                android:contentDescription="@string/speaker"
+                app:tint="#FFFFFF" />
 
         </androidx.cardview.widget.CardView>
 
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/contactName"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:fontFamily="sans-serif"
-        android:text="Amman"
-        android:textColor="#FFFFFF"
-        android:textSize="24sp"
-        android:textStyle="normal"
-        app:layout_constraintTop_toBottomOf="@id/profileCard"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="16dp"/>
 
 
 

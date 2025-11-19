@@ -37,6 +37,7 @@ class ChatActivity : AppCompatActivity() {
     private var isLoading = false
     private var currentQuery: String = ""
     private var isPolling = false
+    private var isPollingIncomingCalls = false
 
     private var showSingleChat: Boolean = false
     private var singleChatUserId: String? = null
@@ -52,6 +53,12 @@ class ChatActivity : AppCompatActivity() {
 
             homebutton = findViewById(R.id.backArrow)
             homebutton.setOnClickListener { finish() }
+
+            // Add icon to show users not in chat list
+            val addIcon = findViewById<ImageView>(R.id.addIcon)
+            addIcon.setOnClickListener {
+                showNewChatDialog()
+            }
 
             tvUsername = findViewById(R.id.tvUsername)
             tvUsername.text = sessionManager.getUsername() ?: ""
@@ -90,6 +97,7 @@ class ChatActivity : AppCompatActivity() {
 
             loadChats()
             startPolling()
+            startIncomingCallPolling()
         } catch (e: Exception) {
             Log.e(TAG, "Error in onCreate", e)
             Toast.makeText(this, "Error loading messages: ${e.message}", Toast.LENGTH_LONG).show()
@@ -102,11 +110,17 @@ class ChatActivity : AppCompatActivity() {
         Log.d(TAG, "onResume - Reloading chat list")
         showAllChats() // Always show all chats when returning to chat list
         loadChats() // Force reload
+
+        // Restart polling if stopped
+        if (!isPollingIncomingCalls) {
+            startIncomingCallPolling()
+        }
     }
 
     override fun onPause() {
         super.onPause()
         isPolling = false
+        isPollingIncomingCalls = false
     }
 
     private fun startPolling() {
@@ -281,5 +295,116 @@ class ChatActivity : AppCompatActivity() {
         }
         Log.d(TAG, "applyFilter - Displaying ${displayUsers.size} users (query: '$q')")
         runOnUiThread { adapter.notifyDataSetChanged() }
+    }
+
+    private fun showNewChatDialog() {
+        val token = sessionManager.getToken() ?: return
+
+        lifecycleScope.launch {
+            try {
+                // Get all users
+                val usersResponse = RetrofitClient.instance.getAllUsers("Bearer $token")
+
+                if (usersResponse.isSuccessful && usersResponse.body()?.success == true) {
+                    val allUsersList = usersResponse.body()?.users ?: emptyList()
+
+                    // Filter out users already in chat list
+                    val existingChatUserIds = allUsers.map { it.id }.toSet()
+                    val newUsers = allUsersList.filter { user ->
+                        user.userId != currentUserId && !existingChatUserIds.contains(user.userId)
+                    }
+
+                    if (newUsers.isEmpty()) {
+                        runOnUiThread {
+                            Toast.makeText(this@ChatActivity, "No new users to chat with", Toast.LENGTH_SHORT).show()
+                        }
+                        return@launch
+                    }
+
+                    // Show dialog with new users
+                    runOnUiThread {
+                        val dialogView = layoutInflater.inflate(R.layout.dialog_new_chat, null)
+                        val recyclerView = dialogView.findViewById<RecyclerView>(R.id.newChatRecyclerView)
+
+                        val adapter = NewChatUserAdapter(newUsers) { user ->
+                            // Open chat with selected user
+                            val intent = Intent(this@ChatActivity, ChatDetailActivity::class.java).apply {
+                                putExtra("receiverUserId", user.userId)
+                                putExtra("receiverUsername", user.username)
+                                putExtra("RECEIVER_PROFILE_URL", user.profilePic)
+                                putExtra("CURRENT_USER_ID", sessionManager.getUserId())
+                            }
+                            startActivity(intent)
+                        }
+
+                        recyclerView.adapter = adapter
+                        recyclerView.layoutManager = LinearLayoutManager(this@ChatActivity)
+
+                        androidx.appcompat.app.AlertDialog.Builder(this@ChatActivity)
+                            .setTitle("Start New Chat")
+                            .setView(dialogView)
+                            .setNegativeButton("Cancel", null)
+                            .show()
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this@ChatActivity, "Failed to load users", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading users for new chat", e)
+                runOnUiThread {
+                    Toast.makeText(this@ChatActivity, "Network error", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun startIncomingCallPolling() {
+        isPollingIncomingCalls = true
+        lifecycleScope.launch {
+            while (isPollingIncomingCalls) {
+                try {
+                    val token = sessionManager.getToken() ?: ""
+
+                    if (token.isNotBlank()) {
+                        val response = RetrofitClient.instance.pollIncomingCall("Bearer $token")
+
+                        if (response.isSuccessful && response.body()?.success == true) {
+                            val hasIncoming = response.body()?.hasIncomingCall ?: false
+
+                            if (hasIncoming) {
+                                val call = response.body()?.call
+                                if (call != null) {
+                                    Log.d(TAG, "Incoming call detected: ${call.callerId}")
+
+                                    // Show incoming call activity
+                                    val intent = Intent(this@ChatActivity, IncomingCallActivity::class.java).apply {
+                                        putExtra("CALL_ID", call.callId)
+                                        putExtra("CHAT_ID", call.channelName)
+                                        putExtra("CALLER_USER_ID", call.callerId)
+                                        putExtra("CALLER_USERNAME", call.callerUsername)
+                                        putExtra("CALLER_PROFILE_URL", call.callerProfileUrl)
+                                        putExtra("CURRENT_USER_ID", currentUserId)
+                                        putExtra("CALL_TYPE", call.callType)
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                    }
+                                    startActivity(intent)
+
+                                    // Stop polling temporarily while handling call
+                                    isPollingIncomingCalls = false
+                                    break
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error polling incoming calls", e)
+                }
+
+                // Poll every 2 seconds
+                kotlinx.coroutines.delay(2000)
+            }
+        }
     }
 }

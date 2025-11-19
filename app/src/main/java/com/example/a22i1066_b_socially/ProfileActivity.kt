@@ -72,6 +72,7 @@ class ProfileActivity : AppCompatActivity() {
     private var targetUserId: String = ""
     private var currentUid: String = ""
     private var isFollowing = false
+    private var targetUserProfilePicUrl: String = ""
 
     private val TAG = "ProfileActivity"
 
@@ -283,6 +284,7 @@ class ProfileActivity : AppCompatActivity() {
                         followingCount.text = user.followingCount.toString()
 
                         val pic = user.profilePicUrl
+                        targetUserProfilePicUrl = pic // Store for use in openMessages()
                         if (pic.isNotBlank()) {
                             Glide.with(this@ProfileActivity).load(pic).circleCrop().into(profileImage)
                         } else {
@@ -574,6 +576,7 @@ class ProfileActivity : AppCompatActivity() {
         val intent = Intent(this, ChatDetailActivity::class.java)
         intent.putExtra("receiverUserId", targetUserId)
         intent.putExtra("receiverUsername", usernameForIntent)
+        intent.putExtra("RECEIVER_PROFILE_URL", targetUserProfilePicUrl)
         intent.putExtra("CURRENT_USER_ID", currentUid)
         intent.putExtra("otherUserId", targetUserId)
         startActivity(intent)

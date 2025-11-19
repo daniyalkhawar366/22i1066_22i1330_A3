@@ -20,6 +20,14 @@
     <string name="message_deleted">Message deleted</string>
     <string name="message_updated">Message updated</string>
     <string name="agora_app_id">caca39104a564ed5b5ee36350148f043</string>
+    <string name="chat">Chat</string>
+    <string name="end_call">End Call</string>
+    <string name="speaker">Speaker</string>
+    <string name="profile_picture">Profile Picture</string>
+    <string name="calling">Calling...</string>
+    <string name="connected">Connected</string>
+    <string name="call_ended">Call ended</string>
+    <string name="call_duration_default">00:00</string>
 
 </resources>
 
