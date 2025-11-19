@@ -72,7 +72,9 @@ class MessageAdapter(
             imagesContainer.removeAllViews()
             if (message.imageUrls.isNotEmpty()) {
                 imagesContainer.visibility = View.VISIBLE
+                android.util.Log.d("MessageAdapter", "Loading ${message.imageUrls.size} images (sent)")
                 for (imageUrl in message.imageUrls) {
+                    android.util.Log.d("MessageAdapter", "Loading image: $imageUrl")
                     val imageView = ImageView(itemView.context).apply {
                         layoutParams = LinearLayout.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -81,9 +83,12 @@ class MessageAdapter(
                             bottomMargin = 8
                         }
                         scaleType = ImageView.ScaleType.CENTER_CROP
+                        adjustViewBounds = true
                     }
                     Glide.with(itemView.context)
                         .load(imageUrl)
+                        .placeholder(android.R.drawable.ic_menu_gallery)
+                        .error(android.R.drawable.ic_menu_report_image)
                         .centerCrop()
                         .into(imageView)
                     imagesContainer.addView(imageView)
@@ -97,18 +102,20 @@ class MessageAdapter(
 
             // Long press for edit/delete
             itemView.setOnLongClickListener {
-                showMessageOptions(message)
+                val now = System.currentTimeMillis()
+                val canEditOrDelete = (now - message.timestamp) <= 5 * 60 * 1000
+                showMessageOptions(message, canEditOrDelete)
                 true
             }
         }
 
-        private fun showMessageOptions(message: Message) {
+        private fun showMessageOptions(message: Message, canEditOrDelete: Boolean) {
             val options = if (message.imageUrls.isNotEmpty()) {
-                arrayOf("Delete")
+                if (canEditOrDelete) arrayOf("Delete") else emptyArray()
             } else {
-                arrayOf("Edit", "Delete")
+                if (canEditOrDelete) arrayOf("Edit", "Delete") else emptyArray()
             }
-
+            if (options.isEmpty()) return
             androidx.appcompat.app.AlertDialog.Builder(itemView.context)
                 .setTitle("Message Options")
                 .setItems(options) { _, which ->
@@ -140,7 +147,9 @@ class MessageAdapter(
             imagesContainer.removeAllViews()
             if (message.imageUrls.isNotEmpty()) {
                 imagesContainer.visibility = View.VISIBLE
+                android.util.Log.d("MessageAdapter", "Loading ${message.imageUrls.size} images (received)")
                 for (imageUrl in message.imageUrls) {
+                    android.util.Log.d("MessageAdapter", "Loading image: $imageUrl")
                     val imageView = ImageView(itemView.context).apply {
                         layoutParams = LinearLayout.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -149,9 +158,12 @@ class MessageAdapter(
                             bottomMargin = 8
                         }
                         scaleType = ImageView.ScaleType.CENTER_CROP
+                        adjustViewBounds = true
                     }
                     Glide.with(itemView.context)
                         .load(imageUrl)
+                        .placeholder(android.R.drawable.ic_menu_gallery)
+                        .error(android.R.drawable.ic_menu_report_image)
                         .centerCrop()
                         .into(imageView)
                     imagesContainer.addView(imageView)

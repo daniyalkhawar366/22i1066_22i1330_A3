@@ -62,7 +62,7 @@ class ProfileActivity : AppCompatActivity() {
     private lateinit var postsAdapter: ProfilePostAdapter
     private val postsList = mutableListOf<Post>()
 
-    private val auth = FirebaseAuth.getInstance()
+    private lateinit var sessionManager: SessionManager
     private val db = FirebaseFirestore.getInstance()
 
     private var highlightsListener: ListenerRegistration? = null
@@ -70,7 +70,7 @@ class ProfileActivity : AppCompatActivity() {
     private var profileStatusListener: ValueEventListener? = null
 
     private var targetUserId: String = ""
-    private val currentUid get() = auth.currentUser?.uid ?: ""
+    private var currentUid: String = ""
     private var isFollowing = false
 
     private val TAG = "ProfileActivity"
@@ -78,6 +78,9 @@ class ProfileActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.profile_layout)
+
+        sessionManager = SessionManager(this)
+        currentUid = sessionManager.getUserId() ?: ""
 
         targetUserId = intent.getStringExtra("userId")
             ?: intent.getStringExtra("USER_ID")
@@ -195,6 +198,38 @@ class ProfileActivity : AppCompatActivity() {
             startActivity(Intent(this, MyProfileActivity::class.java))
             finish()
         }
+
+        // Load current user's profile picture in bottom nav
+        loadCurrentUserProfilePic()
+    }
+
+    private fun loadCurrentUserProfilePic() {
+        if (currentUid.isEmpty()) return
+
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserProfile(
+                    userId = currentUid,
+                    currentUserId = currentUid
+                )
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val profilePic = response.body()?.user?.profilePicUrl
+                    runOnUiThread {
+                        if (!profilePic.isNullOrBlank()) {
+                            Glide.with(this@ProfileActivity)
+                                .load(profilePic)
+                                .circleCrop()
+                                .placeholder(R.drawable.profileicon)
+                                .error(R.drawable.profileicon)
+                                .into(bottomProfileThumb)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading current user profile pic", e)
+            }
+        }
     }
 
     private fun loadProfile() {
@@ -250,10 +285,8 @@ class ProfileActivity : AppCompatActivity() {
                         val pic = user.profilePicUrl
                         if (pic.isNotBlank()) {
                             Glide.with(this@ProfileActivity).load(pic).circleCrop().into(profileImage)
-                            Glide.with(this@ProfileActivity).load(pic).circleCrop().into(bottomProfileThumb)
                         } else {
                             profileImage.setImageResource(R.drawable.profile_pic)
-                            bottomProfileThumb.setImageResource(R.drawable.profileicon)
                         }
 
                         // Hide follow button on own profile
@@ -293,22 +326,10 @@ class ProfileActivity : AppCompatActivity() {
     }
 
     private fun setupOnlineStatusListener() {
-        // Remove previous listener if exists
-        profileStatusRef?.let { r -> profileStatusListener?.let { r.removeEventListener(it) } }
-
-        profileStatusRef = FirebaseDatabase.getInstance().getReference("status").child(targetUserId)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val online = snapshot.child("online").getValue(Boolean::class.java) ?: false
-                profileOnlineIndicator.visibility = if (online) View.VISIBLE else View.GONE
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                profileOnlineIndicator.visibility = View.GONE
-            }
-        }
-        profileStatusRef?.addValueEventListener(listener)
-        profileStatusListener = listener
+        // Online status feature disabled - Firebase Realtime DB paths don't support dots in keys
+        // User IDs from PHP backend contain dots which are invalid in Firebase paths
+        // TODO: Implement online status using PHP backend if needed
+        profileOnlineIndicator.visibility = View.GONE
     }
 
     private fun setupBioExpandable(fullText: String) {
@@ -374,44 +395,49 @@ class ProfileActivity : AppCompatActivity() {
     }
 
     private fun loadHighlights() {
-        highlightsListener = db.collection("highlights")
-            .whereEqualTo("userId", targetUserId)
-            .orderBy("date", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Failed to load highlights", error)
-                    return@addSnapshotListener
-                }
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserHighlights(targetUserId)
 
-                val highlights = snapshot?.documents?.mapNotNull { doc ->
-                    try {
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val highlightItems = response.body()?.highlights ?: emptyList()
+
+                    val highlights = highlightItems.map { item ->
                         Highlight(
-                            id = doc.id,
-                            userId = doc.getString("userId") ?: "",
-                            title = doc.getString("title") ?: "",
-                            imageUrls = doc.get("imageUrls") as? List<String> ?: emptyList(),
-                            date = doc.getTimestamp("date")?.toDate()?.time ?: 0L // Convert Timestamp? to Long (milliseconds)
+                            id = item.id,
+                            userId = item.userId ?: item.user_id ?: "",
+                            title = item.title,
+                            imageUrls = item.imageUrls,
+                            date = item.date
                         )
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing highlight", e)
-                        null
                     }
-                } ?: emptyList()
 
-                highlightAdapter.updateHighlights(highlights)
+                    runOnUiThread {
+                        highlightAdapter.updateHighlights(highlights)
+                    }
+                } else {
+                    Log.e(TAG, "Failed to load highlights: ${response.body()?.error}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading highlights", e)
             }
+        }
     }
 
     private fun setFollowUi(following: Boolean) {
         isFollowing = following
         if (following) {
             followButton.text = "Following"
-            followButton.setBackgroundColor(Color.parseColor("#EFEFEF"))
-            followButton.setTextColor(Color.BLACK)
+            followButton.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                android.graphics.Color.parseColor("#EFEFEF")
+            )
+            followButton.setTextColor(android.graphics.Color.BLACK)
         } else {
             followButton.text = "Follow"
-            followButton.setBackgroundColor(Color.parseColor("#8B5A5A"))
-            followButton.setTextColor(Color.WHITE)
+            followButton.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                android.graphics.Color.parseColor("#8B5A5A")
+            )
+            followButton.setTextColor(android.graphics.Color.WHITE)
         }
     }
 
@@ -590,7 +616,8 @@ class ProfileActivity : AppCompatActivity() {
     }
 
     private fun addContact() {
-        Toast.makeText(this, "Add contact feature coming soon", Toast.LENGTH_SHORT).show()
+        val intent = Intent(this, SuggestedUsersActivity::class.java)
+        startActivity(intent)
     }
 
     private fun openHighlight(highlight: Highlight) {

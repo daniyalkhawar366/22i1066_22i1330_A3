@@ -36,7 +36,8 @@ data class ChatItem(
     val lastMessage: String?,
     val lastMessageType: String?,
     val lastTimestamp: Long,
-    val unreadCount: Int
+    val unreadCount: Int,
+    val isOnline: Boolean = false
 )
 
 data class ChatListResponse(
@@ -64,7 +65,11 @@ data class MessagesResponse(
 data class UserListItem(
     val userId: String,
     val username: String,
-    val profilePic: String?
+    val profilePic: String?,
+    val displayName: String? = null,
+    val firstName: String? = null,
+    val lastName: String? = null,
+    val bio: String? = null
 )
 
 data class UserListResponse(
@@ -173,6 +178,16 @@ interface ApiService {
         @Header("Authorization") token: String
     ): Response<UserListResponse>
 
+    @GET("user.php?action=getFollowers")
+    suspend fun getFollowers(
+        @Query("userId") userId: String
+    ): Response<UserListResponse>
+
+    @GET("user.php?action=getFollowing")
+    suspend fun getFollowing(
+        @Query("userId") userId: String
+    ): Response<UserListResponse>
+
 
     @Multipart
     @POST("upload.php")
@@ -209,6 +224,18 @@ interface ApiService {
     suspend fun deleteMessage(
         @Header("Authorization") token: String,
         @Body request: DeleteMessageRequest
+    ): Response<SimpleResponse>
+
+    @Multipart
+    @POST("messages.php?action=uploadImage")
+    suspend fun uploadMessageImage(
+        @Header("Authorization") token: String,
+        @Part image: MultipartBody.Part
+    ): Response<UploadResponse>
+
+    @POST("messages.php?action=updateActivity")
+    suspend fun updateActivity(
+        @Header("Authorization") token: String
     ): Response<SimpleResponse>
 
     // Highlights API

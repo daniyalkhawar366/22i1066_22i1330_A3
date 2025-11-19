@@ -1,6 +1,5 @@
 package com.example.a22i1066_b_socially
 
-import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -14,8 +13,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.a22i1066_b_socially.network.RetrofitClient
 import kotlinx.coroutines.launch
 
-class FollowersFollowingActivity : AppCompatActivity() {
-    private val TAG = "FollowersFollowing"
+class SuggestedUsersActivity : AppCompatActivity() {
+    private val TAG = "SuggestedUsers"
 
     private lateinit var backArrow: ImageView
     private lateinit var titleText: TextView
@@ -25,9 +24,7 @@ class FollowersFollowingActivity : AppCompatActivity() {
     private lateinit var adapter: FollowListAdapter
     private lateinit var sessionManager: SessionManager
 
-    private var userId: String = ""
     private var currentUserId: String = ""
-    private var listType: String = "" // "followers" or "following"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,17 +33,14 @@ class FollowersFollowingActivity : AppCompatActivity() {
         sessionManager = SessionManager(this)
         currentUserId = sessionManager.getUserId() ?: ""
 
-        userId = intent.getStringExtra("userId") ?: currentUserId
-        listType = intent.getStringExtra("listType") ?: "followers"
-
-        if (userId.isEmpty()) {
+        if (currentUserId.isEmpty()) {
             finish()
             return
         }
 
         initViews()
         setupRecyclerView()
-        loadUsers()
+        loadSuggestedUsers()
     }
 
     private fun initViews() {
@@ -56,7 +50,7 @@ class FollowersFollowingActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progressBar)
         emptyText = findViewById(R.id.emptyText)
 
-        titleText.text = if (listType == "followers") "Followers" else "Following"
+        titleText.text = "Suggested for you"
 
         backArrow.setOnClickListener { finish() }
     }
@@ -67,33 +61,35 @@ class FollowersFollowingActivity : AppCompatActivity() {
             currentUserId = currentUserId,
             onFollowToggle = { user: com.example.a22i1066_b_socially.network.UserListItem, isFollowing: Boolean ->
                 handleFollowToggle(user, isFollowing)
-            },
-            listType = listType  // Pass the list type so adapter knows if users are already followed
+            }
         )
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
     }
 
-    private fun loadUsers() {
+    private fun loadSuggestedUsers() {
         progressBar.visibility = View.VISIBLE
         emptyText.visibility = View.GONE
 
         lifecycleScope.launch {
             try {
-                val response = if (listType == "followers") {
-                    RetrofitClient.instance.getFollowers(userId)
-                } else {
-                    RetrofitClient.instance.getFollowing(userId)
-                }
+                val token = "Bearer ${sessionManager.getAuthToken()}"
+                val response = RetrofitClient.instance.getAllUsers(token)
 
                 if (response.isSuccessful && response.body()?.success == true) {
                     val usersList = response.body()?.users ?: emptyList()
 
+                    // Filter out current user
+                    val filteredUsers = usersList.filter { it.userId != currentUserId }
+
+                    // Check follow status for each user
+                    checkFollowStatusForUsers(filteredUsers)
+
                     runOnUiThread {
-                        if (usersList.isEmpty()) {
+                        if (filteredUsers.isEmpty()) {
                             showEmpty()
                         } else {
-                            adapter.updateList(usersList)
+                            adapter.updateList(filteredUsers)
                             progressBar.visibility = View.GONE
                         }
                     }
@@ -108,6 +104,31 @@ class FollowersFollowingActivity : AppCompatActivity() {
                 runOnUiThread {
                     showEmpty()
                 }
+            }
+        }
+    }
+
+    private fun checkFollowStatusForUsers(users: List<com.example.a22i1066_b_socially.network.UserListItem>) {
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${sessionManager.getAuthToken()}"
+
+                // Check follow status for each user
+                for (user in users) {
+                    try {
+                        val response = RetrofitClient.instance.checkFollowStatus(token, user.userId)
+                        if (response.isSuccessful && response.body()?.success == true) {
+                            val isFollowing = response.body()?.isFollowing ?: false
+                            runOnUiThread {
+                                adapter.updateFollowStatus(user.userId, isFollowing)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error checking follow status for ${user.userId}", e)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking follow statuses", e)
             }
         }
     }
@@ -142,6 +163,7 @@ class FollowersFollowingActivity : AppCompatActivity() {
     private fun showEmpty() {
         progressBar.visibility = View.GONE
         emptyText.visibility = View.VISIBLE
-        emptyText.text = if (listType == "followers") "No followers yet" else "Not following anyone yet"
+        emptyText.text = "No users found"
     }
 }
+

@@ -27,13 +27,14 @@ import com.example.a22i1066_b_socially.network.RetrofitClient
 import com.example.a22i1066_b_socially.network.SendMessageRequest
 import com.example.a22i1066_b_socially.network.EditMessageRequest
 import com.example.a22i1066_b_socially.network.DeleteMessageRequest
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import java.io.IOException
 
 class ChatDetailActivity : AppCompatActivity() {
 
@@ -71,12 +72,9 @@ class ChatDetailActivity : AppCompatActivity() {
 
     private val selectedImages = mutableListOf<Uri>()
     private val MAX_IMAGES = 10
-    private val client = OkHttpClient()
     private var isUploadingImages = false
     private var isPolling = false
 
-    private val CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dihbswob7/image/upload"
-    private val UPLOAD_PRESET = "mobile_unsigned_preset"
 
     private val imagePickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetMultipleContents()
@@ -132,7 +130,7 @@ class ChatDetailActivity : AppCompatActivity() {
 
         usernameText.text = receiverUsername.ifBlank { "(unknown)" }
 
-        val defaultDrawable = R.drawable.profileicon.takeIf { resources.getIdentifier("profileicon", "drawable", packageName) != 0 } ?: R.drawable.bilal
+        val defaultDrawable = R.drawable.profileicon
         Glide.with(this)
             .load(receiverProfileUrl)
             .apply(RequestOptions.circleCropTransform())
@@ -244,7 +242,7 @@ class ChatDetailActivity : AppCompatActivity() {
         var uploadedCount = 0
 
         for (uri in selectedImages) {
-            uploadImageToCloudinary(uri) { success, url ->
+            uploadImageToBackend(uri) { success, url ->
                 uploadedCount++
                 if (success && url != null) {
                     uploadedUrls.add(url)
@@ -266,66 +264,78 @@ class ChatDetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun uploadImageToCloudinary(imageUri: Uri, callback: (Boolean, String?) -> Unit) {
-        val bytes = try {
-            contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to read image", e)
-            null
-        }
-
-        if (bytes == null) {
-            callback(false, null)
-            return
-        }
-
-        val mediaType = "image/*".toMediaTypeOrNull()
-        val fileBody = bytes.toRequestBody(mediaType)
-        val multipartBody = MultipartBody.Builder().setType(MultipartBody.FORM)
-            .addFormDataPart("file", "upload.jpg", fileBody)
-            .addFormDataPart("upload_preset", UPLOAD_PRESET)
-            .build()
-
-        val request = Request.Builder()
-            .url(CLOUDINARY_URL)
-            .post(multipartBody)
-            .build()
-
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Cloudinary upload failed", e)
-                runOnUiThread {
-                    callback(false, null)
+    private fun uploadImageToBackend(imageUri: Uri, callback: (Boolean, String?) -> Unit) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                Log.d(TAG, "Starting image upload for URI: $imageUri")
+                val inputStream = contentResolver.openInputStream(imageUri)
+                if (inputStream == null) {
+                    Log.e(TAG, "Failed to open input stream for URI: $imageUri")
+                    withContext(Dispatchers.Main) { callback(false, null) }
+                    return@launch
                 }
-            }
 
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    if (!it.isSuccessful) {
-                        Log.e(TAG, "Cloudinary error: ${it.code}")
-                        runOnUiThread { callback(false, null) }
-                        return
-                    }
+                val bytes = inputStream.readBytes()
+                inputStream.close()
+                Log.d(TAG, "Read ${bytes.size} bytes from image")
 
-                    val bodyStr = it.body?.string().orEmpty()
-                    try {
-                        val json = JSONObject(bodyStr)
-                        val secureUrl = json.optString("secure_url", json.optString("url"))
-                        runOnUiThread {
-                            callback(secureUrl.isNotBlank(), secureUrl.takeIf { url -> url.isNotBlank() })
+                val requestBody = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart(
+                        "image",
+                        "message_image_${System.currentTimeMillis()}.jpg",
+                        bytes.toRequestBody("image/*".toMediaTypeOrNull())
+                    )
+                    .build()
+
+                val token = sessionManager.getToken() ?: ""
+                val url = "http://192.168.18.55/backend/api/messages.php?action=uploadImage"
+                Log.d(TAG, "Uploading to: $url")
+
+                val request = Request.Builder()
+                    .url(url)
+                    .addHeader("Authorization", "Bearer $token")
+                    .post(requestBody)
+                    .build()
+
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    Log.d(TAG, "Upload response code: ${response.code}")
+                    if (response.isSuccessful) {
+                        val responseBody = response.body?.string() ?: "{}"
+                        Log.d(TAG, "Upload response: $responseBody")
+                        val jsonResponse = JSONObject(responseBody)
+                        if (jsonResponse.getBoolean("success")) {
+                            val imageUrl = jsonResponse.getString("url")
+                            Log.d(TAG, "Image uploaded successfully: $imageUrl")
+                            withContext(Dispatchers.Main) { callback(true, imageUrl) }
+                        } else {
+                            val error = jsonResponse.optString("error", "Unknown error")
+                            Log.e(TAG, "Upload failed: $error")
+                            withContext(Dispatchers.Main) { callback(false, null) }
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to parse response", e)
-                        runOnUiThread { callback(false, null) }
+                    } else {
+                        Log.e(TAG, "Upload request failed with code: ${response.code}")
+                        withContext(Dispatchers.Main) { callback(false, null) }
                     }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Image upload failed with exception", e)
+                withContext(Dispatchers.Main) { callback(false, null) }
             }
-        })
+        }
     }
 
     private fun sendImageMessage(imageUrls: List<String>) {
         val text = messageInput.text.toString().trim()
         val token = sessionManager.getToken() ?: return
+
+        Log.d(TAG, "Sending image message with ${imageUrls.size} images")
 
         lifecycleScope.launch {
             try {
@@ -339,14 +349,18 @@ class ChatDetailActivity : AppCompatActivity() {
                 )
 
                 if (response.isSuccessful && response.body()?.success == true) {
+                    Log.d(TAG, "Image message sent successfully")
                     messageInput.setText("")
                     loadMessages()
+                    Toast.makeText(this@ChatDetailActivity, "Image(s) sent", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(this@ChatDetailActivity, "Failed to send", Toast.LENGTH_SHORT).show()
+                    val errorMsg = response.body()?.error ?: "Unknown error"
+                    Log.e(TAG, "Failed to send image message: $errorMsg")
+                    Toast.makeText(this@ChatDetailActivity, "Failed to send: $errorMsg", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error sending image message", e)
-                Toast.makeText(this@ChatDetailActivity, "Network error", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@ChatDetailActivity, "Network error: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -459,6 +473,7 @@ class ChatDetailActivity : AppCompatActivity() {
         val token = sessionManager.getToken() ?: return
 
         sendButton.isEnabled = false
+        Log.d(TAG, "Sending text message to: $receiverUserId")
 
         lifecycleScope.launch {
             try {
@@ -472,14 +487,17 @@ class ChatDetailActivity : AppCompatActivity() {
                 )
 
                 if (response.isSuccessful && response.body()?.success == true) {
+                    Log.d(TAG, "Text message sent successfully")
                     messageInput.setText("")
                     loadMessages()
                 } else {
-                    Toast.makeText(this@ChatDetailActivity, "Failed to send", Toast.LENGTH_SHORT).show()
+                    val errorMsg = response.body()?.error ?: "Unknown error"
+                    Log.e(TAG, "Failed to send message: $errorMsg")
+                    Toast.makeText(this@ChatDetailActivity, "Failed to send: $errorMsg", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error sending message", e)
-                Toast.makeText(this@ChatDetailActivity, "Network error", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@ChatDetailActivity, "Network error: ${e.message}", Toast.LENGTH_SHORT).show()
             } finally {
                 sendButton.isEnabled = true
             }

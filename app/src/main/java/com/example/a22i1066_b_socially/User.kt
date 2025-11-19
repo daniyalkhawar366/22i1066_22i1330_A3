@@ -19,6 +19,7 @@ data class User(
     val followingCount: Long = 0,
     val postsCount: Long = 0,
     val username: String? = null,
+    val isOnline: Boolean = false,
     val createdAt: Any? = null // server timestamp when created
 )
 

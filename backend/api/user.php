@@ -319,5 +319,97 @@ if ($method === 'POST' && $action === 'updateProfile') {
     exit;
 }
 
+// Get followers list
+if ($method === 'GET' && $action === 'getFollowers') {
+    $userId = $_GET['userId'] ?? '';
+
+    if (empty($userId)) {
+        echo json_encode(['success' => false, 'error' => 'User ID required']);
+        exit;
+    }
+
+    try {
+        $db = getDB();
+
+        // Get all followers of the user
+        $stmt = $db->prepare("
+            SELECT u.id, u.username, u.display_name, u.first_name, u.last_name,
+                   u.profile_pic_url, u.bio
+            FROM users u
+            INNER JOIN follows f ON u.id = f.follower_id
+            WHERE f.following_id = :userId
+            ORDER BY u.username ASC
+        ");
+        $stmt->bindParam(':userId', $userId);
+        $stmt->execute();
+
+        $followers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode([
+            'success' => true,
+            'users' => array_map(function($user) {
+                return [
+                    'userId' => $user['id'],
+                    'username' => $user['username'] ?? '',
+                    'displayName' => $user['display_name'] ?? '',
+                    'firstName' => $user['first_name'] ?? '',
+                    'lastName' => $user['last_name'] ?? '',
+                    'profilePic' => $user['profile_pic_url'] ?? '',
+                    'bio' => $user['bio'] ?? ''
+                ];
+            }, $followers)
+        ]);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'error' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// Get following list
+if ($method === 'GET' && $action === 'getFollowing') {
+    $userId = $_GET['userId'] ?? '';
+
+    if (empty($userId)) {
+        echo json_encode(['success' => false, 'error' => 'User ID required']);
+        exit;
+    }
+
+    try {
+        $db = getDB();
+
+        // Get all users that this user is following
+        $stmt = $db->prepare("
+            SELECT u.id, u.username, u.display_name, u.first_name, u.last_name,
+                   u.profile_pic_url, u.bio
+            FROM users u
+            INNER JOIN follows f ON u.id = f.following_id
+            WHERE f.follower_id = :userId
+            ORDER BY u.username ASC
+        ");
+        $stmt->bindParam(':userId', $userId);
+        $stmt->execute();
+
+        $following = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode([
+            'success' => true,
+            'users' => array_map(function($user) {
+                return [
+                    'userId' => $user['id'],
+                    'username' => $user['username'] ?? '',
+                    'displayName' => $user['display_name'] ?? '',
+                    'firstName' => $user['first_name'] ?? '',
+                    'lastName' => $user['last_name'] ?? '',
+                    'profilePic' => $user['profile_pic_url'] ?? '',
+                    'bio' => $user['bio'] ?? ''
+                ];
+            }, $following)
+        ]);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'error' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
 echo json_encode(['success' => false, 'error' => 'Invalid request']);
 ?>

@@ -7,7 +7,6 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
-import com.google.firebase.database.*
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
 import java.text.DateFormat
@@ -24,9 +23,6 @@ class ChatUserAdapter(
         val lastMessage: TextView = itemView.findViewById(R.id.lastMessage)
         val lastTimestamp: TextView = itemView.findViewById(R.id.lastTimestamp)
         val onlineIndicator: View = itemView.findViewById(R.id.onlineIndicator)
-
-        var statusRef: DatabaseReference? = null
-        var statusListener: ValueEventListener? = null
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): UserViewHolder {
@@ -79,40 +75,8 @@ class ChatUserAdapter(
                 .into(holder.profileImage)
         }
 
-        // Remove previous presence listener if any
-        holder.statusRef?.let { ref ->
-            holder.statusListener?.let { listener -> ref.removeEventListener(listener) }
-            holder.statusRef = null
-            holder.statusListener = null
-        }
-        holder.onlineIndicator.visibility = View.GONE
-
-        // Only attach presence listener if user id is present
-        if (!user.id.isNullOrBlank()) {
-            val ref = FirebaseDatabase.getInstance().getReference("status").child(user.id)
-            val listener = object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val online = snapshot.child("online").getValue(Boolean::class.java) ?: false
-                    holder.onlineIndicator.visibility = if (online) View.VISIBLE else View.GONE
-                }
-
-                override fun onCancelled(error: DatabaseError) {
-                    holder.onlineIndicator.visibility = View.GONE
-                }
-            }
-            ref.addValueEventListener(listener)
-            holder.statusRef = ref
-            holder.statusListener = listener
-        }
-    }
-
-    override fun onViewRecycled(holder: UserViewHolder) {
-        super.onViewRecycled(holder)
-        holder.statusRef?.let { ref ->
-            holder.statusListener?.let { listener -> ref.removeEventListener(listener) }
-        }
-        holder.statusRef = null
-        holder.statusListener = null
+        // Show online indicator for online users
+        holder.onlineIndicator.visibility = if (user.isOnline) View.VISIBLE else View.GONE
     }
 
     override fun getItemCount() = users.size

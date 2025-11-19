@@ -194,6 +194,9 @@
             android:name=".FollowersFollowingActivity"
             android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
+            android:name=".SuggestedUsersActivity"
+            android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
+        <activity
             android:name=".CommentsActivity"
             android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
