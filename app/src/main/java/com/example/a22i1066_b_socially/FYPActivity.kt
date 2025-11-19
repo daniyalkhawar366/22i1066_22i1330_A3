@@ -173,11 +173,12 @@ class FYPActivity : AppCompatActivity() {
     }
 
     private fun loadCurrentUserProfile() {
-        val userId = auth.currentUser?.uid ?: return
-
         lifecycleScope.launch {
             try {
-                val response = RetrofitClient.instance.getUserProfile("profile", userId)
+                val response = RetrofitClient.instance.getUserProfile(
+                    userId = currentUserId,
+                    currentUserId = currentUserId
+                )
 
                 if (response.isSuccessful && response.body()?.success == true) {
                     val userProfileResponse = response.body()

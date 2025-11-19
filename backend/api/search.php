@@ -2,11 +2,20 @@
 // Prevent any output before JSON
 ob_start();
 
-require_once __DIR__ . '/../config.php';
-require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/jwt_helper.php';
 
 // Clear any accidental output
 ob_end_clean();
+
+// Initialize database
+try {
+    $db = getDB();
+} catch (Exception $e) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'error' => 'Database connection failed']);
+    exit();
+}
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
@@ -39,7 +48,7 @@ if ($method === 'GET' && $action === 'search') {
 
         $searchTerm = '%' . $query . '%';
 
-        // Search users by username, first_name, last_name, or display_name
+        // Search users by username, first_name, last_name, or display_name using PDO
         $stmt = $db->prepare("
             SELECT id, username, first_name, last_name, display_name, bio, profile_pic_url
             FROM users
@@ -60,8 +69,7 @@ if ($method === 'GET' && $action === 'search') {
             LIMIT ?
         ");
 
-        $stmt->bind_param(
-            "sssssssi",
+        $stmt->execute([
             $currentUserId,
             $searchTerm,
             $searchTerm,
@@ -70,13 +78,10 @@ if ($method === 'GET' && $action === 'search') {
             $searchTerm,
             $searchTerm,
             $limit
-        );
-
-        $stmt->execute();
-        $result = $stmt->get_result();
+        ]);
 
         $users = [];
-        while ($row = $result->fetch_assoc()) {
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             // Build display name
             $firstName = trim($row['first_name'] ?? '');
             $lastName = trim($row['last_name'] ?? '');

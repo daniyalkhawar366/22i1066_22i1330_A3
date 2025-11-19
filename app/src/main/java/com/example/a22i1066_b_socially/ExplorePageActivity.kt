@@ -2,11 +2,18 @@ package com.example.a22i1066_b_socially
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import com.bumptech.glide.Glide
+import com.example.a22i1066_b_socially.network.RetrofitClient
+import kotlinx.coroutines.launch
 
 class ExplorePageActivity : AppCompatActivity() {
+    private val TAG = "ExplorePageActivity"
+    private var currentUserId: String = ""
 
     private lateinit var profile: ImageView
     private lateinit var post: ImageView
@@ -17,6 +24,10 @@ class ExplorePageActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.explore)
+
+        val sessionManager = SessionManager(this)
+        currentUserId = sessionManager.getUserId() ?: ""
+
         profile = findViewById(R.id.profile)
         profile.setOnClickListener {
             val intent = Intent(this, MyProfileActivity::class.java)
@@ -48,5 +59,35 @@ class ExplorePageActivity : AppCompatActivity() {
             finish()
         }
 
+        loadUserProfilePic()
+    }
+
+    private fun loadUserProfilePic() {
+        if (currentUserId.isEmpty()) return
+
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserProfile(
+                    userId = currentUserId,
+                    currentUserId = currentUserId
+                )
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val profilePic = response.body()?.user?.profilePicUrl
+                    runOnUiThread {
+                        if (!profilePic.isNullOrBlank()) {
+                            Glide.with(this@ExplorePageActivity)
+                                .load(profilePic)
+                                .circleCrop()
+                                .placeholder(R.drawable.profile_pic)
+                                .error(R.drawable.profile_pic)
+                                .into(profile)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading profile pic", e)
+            }
+        }
     }
 }

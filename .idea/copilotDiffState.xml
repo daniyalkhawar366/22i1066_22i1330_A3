@@ -11,14 +11,6 @@
             </PendingDiffInfo>
           </value>
         </entry>
-        <entry key="$PROJECT_DIR$/setup_profile_migration.bat">
-          <value>
-            <PendingDiffInfo>
-              <option name="filePath" value="$PROJECT_DIR$/setup_profile_migration.bat" />
-              <option name="updatedContent" value="@echo off&#10;echo ====================================&#10;echo Profile Migration Setup Script&#10;echo ====================================&#10;echo.&#10;&#10;echo This script will help you migrate the profile functionality to PHP backend.&#10;echo.&#10;&#10;echo Step 1: Database Migration&#10;echo ---------------------------&#10;echo You need to run the SQL migration file on your MySQL database.&#10;echo.&#10;echo Option A - Using MySQL Command Line:&#10;echo   mysql -u root -p socially_db ^&lt; backend\migration_profile_update.sql&#10;echo.&#10;echo Option B - Using phpMyAdmin:&#10;echo   1. Open phpMyAdmin in your browser&#10;echo   2. Select 'socially_db' database&#10;echo   3. Go to SQL tab&#10;echo   4. Open and copy contents of: backend\migration_profile_update.sql&#10;echo   5. Paste and click 'Go'&#10;echo.&#10;&#10;echo Step 2: Verify Backend URL&#10;echo ---------------------------&#10;echo Open: app\src\main\java\com\example\a22i1066_b_socially\RetrofitClient.kt&#10;echo Make sure BASE_URL matches your PHP backend server URL&#10;echo Current: http://192.168.18.55/backend/api/&#10;echo.&#10;&#10;echo Step 3: Test the App&#10;echo ---------------------&#10;echo 1. Build and run the app&#10;echo 2. Login with your account&#10;echo 3. Navigate to My Profile&#10;echo 4. Try editing your profile&#10;echo 5. Try viewing another user's profile&#10;echo 6. Try following/unfollowing&#10;echo.&#10;&#10;echo For detailed information, see: PROFILE_MIGRATION_README.md&#10;echo.&#10;&#10;pause&#10;" />
-            </PendingDiffInfo>
-          </value>
-        </entry>
       </map>
     </option>
   </component>

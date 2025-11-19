@@ -1,20 +1,22 @@
 <?php
+// Prevent any output before JSON
+ob_start();
+
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/jwt_helper.php';
+
+// Clear any accidental output
+ob_end_clean();
+
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../middleware/auth.php';
-
 try {
-    $database = new Database();
-    $db = $database->getConnection();
+    $db = getDB();
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Database connection failed']);
@@ -27,38 +29,39 @@ $action = $_GET['action'] ?? '';
 // CREATE HIGHLIGHT
 if ($method === 'POST' && $action === 'create') {
     try {
-        $authUserId = verifyToken();
-    } catch (Exception $e) {
-        http_response_code(401);
-        echo json_encode(['success' => false, 'error' => 'Unauthorized: ' . $e->getMessage()]);
-        exit();
-    }
+        // Get and verify JWT token
+        $headers = getallheaders();
+        $authHeader = $headers['Authorization'] ?? '';
+        $token = str_replace('Bearer ', '', $authHeader);
+        $userData = verifyJWT($token);
 
-    if (!$authUserId) {
-        http_response_code(401);
-        echo json_encode(['success' => false, 'error' => 'Unauthorized']);
-        exit();
-    }
+        if (!$userData) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+            exit();
+        }
 
-    $input = file_get_contents('php://input');
-    $data = json_decode($input, true);
+        $authUserId = $userData['user_id'];
 
-    if (empty($data['title']) || empty($data['imageUrls']) || empty($data['date'])) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Title, images, and date required']);
-        exit();
-    }
+        $input = file_get_contents('php://input');
+        $data = json_decode($input, true);
 
-    try {
+        if (empty($data['title']) || empty($data['imageUrls']) || empty($data['date'])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Title, images, and date required']);
+            exit();
+        }
+
         $highlightId = uniqid('highlight_', true);
         $imageUrlsJson = json_encode($data['imageUrls']);
-        $date = intval($data['date']); // Unix timestamp
+        $dateTimestamp = intval($data['date']); // Unix timestamp in milliseconds
+        $dateSeconds = floor($dateTimestamp / 1000); // Convert to seconds
 
+        // Use PDO instead of mysqli
         $stmt = $db->prepare("INSERT INTO highlights (id, user_id, title, image_urls, date, created_at) VALUES (?, ?, ?, ?, FROM_UNIXTIME(?), NOW())");
-        $stmt->bind_param('ssssi', $highlightId, $authUserId, $data['title'], $imageUrlsJson, $date);
-        $stmt->execute();
-        $stmt->close();
+        $stmt->execute([$highlightId, $authUserId, $data['title'], $imageUrlsJson, $dateSeconds]);
 
+        http_response_code(200);
         echo json_encode([
             'success' => true,
             'highlightId' => $highlightId,
@@ -67,6 +70,7 @@ if ($method === 'POST' && $action === 'create') {
         exit();
 
     } catch (Exception $e) {
+        error_log("Highlight creation error: " . $e->getMessage());
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Failed to create highlight: ' . $e->getMessage()]);
         exit();
@@ -74,7 +78,7 @@ if ($method === 'POST' && $action === 'create') {
 }
 
 // GET USER HIGHLIGHTS
-if ($method === 'GET' && $action === 'getUserHighlights') {
+elseif ($method === 'GET' && $action === 'getUserHighlights') {
     $userId = $_GET['userId'] ?? '';
 
     if (empty($userId)) {
@@ -84,19 +88,19 @@ if ($method === 'GET' && $action === 'getUserHighlights') {
     }
 
     try {
+        // Use PDO instead of mysqli
         $stmt = $db->prepare("SELECT id, user_id, title, image_urls, UNIX_TIMESTAMP(date) as date FROM highlights WHERE user_id = ? ORDER BY date DESC");
-        $stmt->bind_param('s', $userId);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $highlights = $result->fetch_all(MYSQLI_ASSOC);
-        $stmt->close();
+        $stmt->execute([$userId]);
+        $highlights = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Parse JSON image_urls
         foreach ($highlights as &$highlight) {
             $highlight['imageUrls'] = json_decode($highlight['image_urls'], true) ?? [];
+            $highlight['date'] = intval($highlight['date']) * 1000; // Convert to milliseconds
             unset($highlight['image_urls']);
         }
 
+        http_response_code(200);
         echo json_encode([
             'success' => true,
             'highlights' => $highlights
@@ -111,7 +115,7 @@ if ($method === 'GET' && $action === 'getUserHighlights') {
 }
 
 // GET SINGLE HIGHLIGHT
-if ($method === 'GET' && $action === 'getHighlight') {
+elseif ($method === 'GET' && $action === 'getHighlight') {
     $highlightId = $_GET['highlightId'] ?? '';
 
     if (empty($highlightId)) {
@@ -122,11 +126,8 @@ if ($method === 'GET' && $action === 'getHighlight') {
 
     try {
         $stmt = $db->prepare("SELECT id, user_id, title, image_urls, UNIX_TIMESTAMP(date) as date FROM highlights WHERE id = ?");
-        $stmt->bind_param('s', $highlightId);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $highlight = $result->fetch_assoc();
-        $stmt->close();
+        $stmt->execute([$highlightId]);
+        $highlight = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$highlight) {
             http_response_code(404);
@@ -135,8 +136,10 @@ if ($method === 'GET' && $action === 'getHighlight') {
         }
 
         $highlight['imageUrls'] = json_decode($highlight['image_urls'], true) ?? [];
+        $highlight['date'] = intval($highlight['date']) * 1000;
         unset($highlight['image_urls']);
 
+        http_response_code(200);
         echo json_encode([
             'success' => true,
             'highlight' => $highlight
@@ -151,37 +154,34 @@ if ($method === 'GET' && $action === 'getHighlight') {
 }
 
 // DELETE HIGHLIGHT
-if ($method === 'DELETE' && $action === 'delete') {
+elseif ($method === 'DELETE' && $action === 'delete') {
     try {
-        $authUserId = verifyToken();
-    } catch (Exception $e) {
-        http_response_code(401);
-        echo json_encode(['success' => false, 'error' => 'Unauthorized: ' . $e->getMessage()]);
-        exit();
-    }
+        // Get and verify JWT token
+        $headers = getallheaders();
+        $authHeader = $headers['Authorization'] ?? '';
+        $token = str_replace('Bearer ', '', $authHeader);
+        $userData = verifyJWT($token);
 
-    if (!$authUserId) {
-        http_response_code(401);
-        echo json_encode(['success' => false, 'error' => 'Unauthorized']);
-        exit();
-    }
+        if (!$userData) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+            exit();
+        }
 
-    $highlightId = $_GET['highlightId'] ?? '';
+        $authUserId = $userData['user_id'];
 
-    if (empty($highlightId)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Highlight ID required']);
-        exit();
-    }
+        $highlightId = $_GET['highlightId'] ?? '';
 
-    try {
+        if (empty($highlightId)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Highlight ID required']);
+            exit();
+        }
+
         // Verify ownership
         $stmt = $db->prepare("SELECT user_id FROM highlights WHERE id = ?");
-        $stmt->bind_param('s', $highlightId);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $highlight = $result->fetch_assoc();
-        $stmt->close();
+        $stmt->execute([$highlightId]);
+        $highlight = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$highlight) {
             http_response_code(404);
@@ -197,10 +197,9 @@ if ($method === 'DELETE' && $action === 'delete') {
 
         // Delete highlight
         $stmt = $db->prepare("DELETE FROM highlights WHERE id = ?");
-        $stmt->bind_param('s', $highlightId);
-        $stmt->execute();
-        $stmt->close();
+        $stmt->execute([$highlightId]);
 
+        http_response_code(200);
         echo json_encode([
             'success' => true,
             'message' => 'Highlight deleted successfully'
@@ -208,13 +207,17 @@ if ($method === 'DELETE' && $action === 'delete') {
         exit();
 
     } catch (Exception $e) {
+        error_log("Delete highlight error: " . $e->getMessage());
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Failed to delete highlight: ' . $e->getMessage()]);
         exit();
     }
 }
 
-http_response_code(400);
-echo json_encode(['success' => false, 'error' => 'Invalid request']);
-?>
+// Invalid request
+else {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'Invalid request']);
+    exit();
+}
 

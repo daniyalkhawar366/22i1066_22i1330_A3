@@ -1,12 +1,13 @@
 <?php
 ob_start();
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/../middleware/auth.php';
 ob_clean();
 
 header('Content-Type: application/json');
 
 try {
+    $db = getDB();
     $currentUserId = verifyToken();
     
     if (!$currentUserId) {
@@ -18,7 +19,7 @@ try {
     $action = $_GET['action'] ?? '';
 
     if ($action === 'getAll') {
-    $stmt = $pdo->query("SELECT id, username, profile_pic_url FROM users ORDER BY username ASC");
+    $stmt = $db->query("SELECT id, username, profile_pic_url FROM users ORDER BY username ASC");
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $result = [];

@@ -16,16 +16,6 @@
         android:src="@drawable/ic_launcher_foreground"
         android:contentDescription="App Logo" />
 
-    <!-- App Name -->
-    <TextView
-        android:id="@+id/splashAppName"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Socially"
-        android:textSize="32sp"
-        android:textColor="@color/black"
-        android:layout_marginTop="24dp" />
-
     <!-- Progress Bar -->
     <ProgressBar
         android:id="@+id/progressBar"

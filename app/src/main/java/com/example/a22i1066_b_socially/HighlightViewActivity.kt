@@ -1,11 +1,15 @@
 // app/src/main/java/com/example/a22i1066_b_socially/HighlightViewActivity.kt
 package com.example.a22i1066_b_socially
 
+import android.animation.ObjectAnimator
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -31,6 +35,12 @@ class HighlightViewActivity : AppCompatActivity() {
     private var currentImageIndex = 0
 
     private val TAG = "HighlightViewActivity"
+
+    // Auto-progress timer
+    private val handler = Handler(Looper.getMainLooper())
+    private var progressRunnable: Runnable? = null
+    private val PROGRESS_DURATION = 5000L // 5 seconds per image
+    private val progressAnimators = mutableListOf<ObjectAnimator>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -111,14 +121,17 @@ class HighlightViewActivity : AppCompatActivity() {
 
     private fun setupProgressBars(count: Int) {
         progressBars.removeAllViews()
+        progressAnimators.clear()
 
         for (i in 0 until count) {
-            val progressBar = View(this)
+            val progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
             val params = LinearLayout.LayoutParams(0, 4)
             params.weight = 1f
-            if (i > 0) params.marginStart = 4
+            if (i > 0) params.marginStart = 8
             progressBar.layoutParams = params
-            progressBar.setBackgroundColor(0x70707070)
+            progressBar.max = 100
+            progressBar.progress = 0
+            progressBar.progressDrawable = resources.getDrawable(R.drawable.progress_bar_white, theme)
             progressBars.addView(progressBar)
         }
     }
@@ -135,16 +148,50 @@ class HighlightViewActivity : AppCompatActivity() {
             .into(imageView)
 
         updateProgressBars()
+        startAutoProgress()
     }
 
     private fun updateProgressBars() {
+        // Cancel all previous animations
+        progressAnimators.forEach { it.cancel() }
+        progressAnimators.clear()
+
         for (i in 0 until progressBars.childCount) {
-            val bar = progressBars.getChildAt(i)
-            bar.setBackgroundColor(
-                if (i == currentImageIndex) 0xFFFFFFFF.toInt()
-                else 0x70707070
-            )
+            val bar = progressBars.getChildAt(i) as? ProgressBar ?: continue
+
+            when {
+                i < currentImageIndex -> {
+                    // Already viewed - fill completely
+                    bar.progress = 100
+                }
+                i == currentImageIndex -> {
+                    // Currently viewing - animate from 0 to 100
+                    bar.progress = 0
+                    val animator = ObjectAnimator.ofInt(bar, "progress", 0, 100)
+                    animator.duration = PROGRESS_DURATION
+                    animator.start()
+                    progressAnimators.add(animator)
+                }
+                else -> {
+                    // Not yet viewed - empty
+                    bar.progress = 0
+                }
+            }
         }
+    }
+
+    private fun startAutoProgress() {
+        stopAutoProgress()
+
+        progressRunnable = Runnable {
+            nextImage()
+        }
+        handler.postDelayed(progressRunnable!!, PROGRESS_DURATION)
+    }
+
+    private fun stopAutoProgress() {
+        progressRunnable?.let { handler.removeCallbacks(it) }
+        progressRunnable = null
     }
 
     private fun nextImage() {
@@ -155,6 +202,27 @@ class HighlightViewActivity : AppCompatActivity() {
         } else {
             finish()
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        stopAutoProgress()
+        progressAnimators.forEach { it.pause() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (highlight != null) {
+            startAutoProgress()
+            progressAnimators.forEach { it.resume() }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopAutoProgress()
+        progressAnimators.forEach { it.cancel() }
+        progressAnimators.clear()
     }
 
     private fun showOptions() {

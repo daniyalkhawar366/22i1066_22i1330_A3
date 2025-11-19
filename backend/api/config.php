@@ -1,39 +1,35 @@
 <?php
-header("Content-Type: application/json");
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST, GET, PUT, DELETE");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
+// Disable HTML error display
+ini_set('display_errors', '0');
+error_reporting(E_ALL);
+
+// Note: Headers are set by individual API files to avoid conflicts
+// Do not set headers here
 
 define('DB_HOST', 'localhost');
 define('DB_NAME', 'socially_db');
 define('DB_USER', 'root');
 define('DB_PASS', '');
 
+// Only define JWT_SECRET if not already defined
+if (!defined('JWT_SECRET')) {
+    define('JWT_SECRET', 'your_secret_key_here_change_in_production_make_it_long_and_random');
+}
+
 function getDB() {
     try {
         $pdo = new PDO("mysql:host=" . DB_HOST . ";dbname=" . DB_NAME, DB_USER, DB_PASS);
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
         return $pdo;
     } catch(PDOException $e) {
+        error_log("Database connection failed: " . $e->getMessage());
         http_response_code(500);
-        echo json_encode(["error" => "Database connection failed"]);
+        echo json_encode(["success" => false, "error" => "Database connection failed"]);
         exit();
     }
 }
 
-function generateJWT($userId) {
-    $payload = [
-        'user_id' => $userId,
-        'exp' => time() + (7 * 24 * 60 * 60)
-    ];
-    return base64_encode(json_encode($payload));
-}
-
-function verifyJWT($token) {
-    $decoded = json_decode(base64_decode($token), true);
-    if ($decoded && $decoded['exp'] > time()) {
-        return $decoded['user_id'];
-    }
-    return null;
-}
-?>
+// Note: generateJWT() and verifyJWT() are defined in auth.php
+// Do not duplicate them here to avoid redeclaration errors

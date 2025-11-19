@@ -13,9 +13,6 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-
-
-
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -27,227 +24,181 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
         android:usesCleartextTraffic="true"
-    tools:targetApi="31">
-        <activity android:name=".ProfileImageUploaderActivity" />
+        tools:targetApi="31">
+        <activity android:name=".ProfileImageUploaderActivity" android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
-            <!-- Remove intent-filter from here -->
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar">
         </activity>
         <activity
             android:name=".SplashActivity"
-            android:exported="true">
+            android:exported="true"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <service
-            android:name=".MyFirebaseMessagingService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
-
-
-
-
-
         <activity
             android:name=".SignupActivity"
             android:exported="false"
-            android:label="@string/sign_up"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar" />
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
         <activity
             android:name=".LoginActivity"
             android:exported="false"
-            android:label="@string/login"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar" />
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
         <activity
             android:name=".ChooseAccountActivity"
             android:exported="false"
-            android:label="Choose Account"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".FYPActivity"
             android:exported="false"
-            android:label="FYP"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".ExplorePageActivity"
             android:exported="false"
-            android:label="Explore"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".ChatActivity"
             android:exported="false"
-            android:label="Chats"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".MyProfileActivity"
             android:exported="false"
-            android:label="MyProfile"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".MakePostActivity"
             android:exported="false"
-            android:label="MakePost"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
 
-        <activity android:name=".AddPostDetailsActivity" android:exported="false" />
+        <activity android:name=".AddPostDetailsActivity" android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
         <activity
             android:name=".NotificationsFollowingActivity"
             android:exported="false"
-            android:label="NotificationsFollowing"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".NotificationsYouActivity"
             android:exported="false"
-            android:label="NotificationsYou"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".AddStoryActivity"
             android:exported="false"
-            android:label="Add Story"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".MyStoryActivity"
             android:exported="false"
-            android:label="View MyStory"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".BilalStoryActivity"
             android:exported="false"
-            android:label="View Bilals Story"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".ibbiStoryActivity"
             android:exported="false"
-            android:label="View Ibrahims Story"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".ammanStoryActivity"
             android:exported="false"
-            android:label="View Ammans Story"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".rafayStoryActivity"
             android:exported="false"
-            android:label="View Ammans Story"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".SearchBarActivity"
             android:exported="false"
-            android:label="Search Bar"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".EditProfileActivity"
             android:exported="false"
-            android:label="Edit Profile"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".ibbiCallActivity"
             android:exported="false"
-            android:label="Calling Ibrahim"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".jdCallActivity"
             android:exported="false"
-            android:label="Calling Ibrahim"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".samCallActivity"
             android:exported="false"
-            android:label="Calling Ibrahim"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".ammanCallActivity"
             android:exported="false"
-            android:label="Calling Ibrahim"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".rafayCallActivity"
             android:exported="false"
-            android:label="Calling Ibrahim"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".bilalCallActivity"
             android:exported="false"
-            android:label="Calling Ibrahim"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".HighlightsActivity"
             android:exported="false"
-            android:label="Hunza"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".FootsallActivity"
             android:exported="false"
-            android:label="Ball"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".FriendsActivity"
             android:exported="false"
-            android:label="Dost"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".IbbiProfileActivity"
             android:exported="false"
-            android:label="Ibrahim's Profile"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".ibbiHighlights1Activity"
             android:exported="false"
-            android:label="Kashmir"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".ibbiHighlights2Activity"
             android:exported="false"
-            android:label="University"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".ibbiHighlights3Activity"
             android:exported="false"
-            android:label="Football"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".ibbiHighlights4Activity"
             android:exported="false"
-            android:label="Cars"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".UploadStoryActivity"
             android:exported="false"
-            android:label="Upload Story"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"/>
-        <activity android:name=".ChatDetailActivity" />
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
+        <activity android:name=".ChatDetailActivity" android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
-        <activity android:name=".ProfileActivity" />
+        <activity android:name=".ProfileActivity" android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
-        <activity android:name=".CallActivity" android:exported="false" />
-        <activity android:name=".VideoCallActivity" android:exported="false" />
+        <activity android:name=".CallActivity" android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+        <activity android:name=".VideoCallActivity" android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
-        <activity android:name=".PostDetailActivity" android:exported="false" />
-        <activity android:name=".AddHighlightActivity" android:exported="false" />
-        <activity android:name=".HighlightViewActivity" android:exported="false" />
-        <activity android:name=".OtherUserStoryActivity" android:exported="false" />
+        <activity android:name=".PostDetailActivity" android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+        <activity android:name=".AddHighlightActivity" android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+        <activity android:name=".HighlightViewActivity" android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+        <activity android:name=".OtherUserStoryActivity" android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
         <activity
             android:name=".ImageViewerActivity"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
         <activity
             android:name=".FollowersFollowingActivity"
-            android:exported="false"/>
+            android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".CommentsActivity"
-            android:exported="false"/>
+            android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
             android:name=".SharePostActivity"
-            android:exported="false"/>
+            android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
 
 
 

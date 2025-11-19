@@ -77,11 +77,18 @@ class LoginActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
+                android.util.Log.d("LoginActivity", "Attempting login for: $email")
                 val response = RetrofitClient.instance.login(LoginRequest(email, password))
+
+                android.util.Log.d("LoginActivity", "Response code: ${response.code()}")
+                android.util.Log.d("LoginActivity", "Response successful: ${response.isSuccessful}")
+                android.util.Log.d("LoginActivity", "Response body: ${response.body()}")
 
                 if (response.isSuccessful && response.body()?.success == true) {
                     val token = response.body()?.token ?: ""
                     val userId = response.body()?.userId ?: ""
+
+                    android.util.Log.d("LoginActivity", "Login successful, userId: $userId")
 
                     // Get username from API - fetch user profile
                     val profileResponse = RetrofitClient.instance.getUserProfile("profile", userId)
@@ -101,6 +108,8 @@ class LoginActivity : AppCompatActivity() {
                         finish()
                     }
                 } else {
+                    val errorBody = response.errorBody()?.string()
+                    android.util.Log.e("LoginActivity", "Login failed - Error body: $errorBody")
                     val error = response.body()?.error ?: "Login failed"
                     runOnUiThread {
                         Toast.makeText(this@LoginActivity, error, Toast.LENGTH_SHORT).show()
@@ -108,6 +117,10 @@ class LoginActivity : AppCompatActivity() {
                     }
                 }
             } catch (e: Exception) {
+                android.util.Log.e("LoginActivity", "Login exception", e)
+                android.util.Log.e("LoginActivity", "Exception type: ${e.javaClass.simpleName}")
+                android.util.Log.e("LoginActivity", "Exception message: ${e.message}")
+                e.printStackTrace()
                 runOnUiThread {
                     Toast.makeText(this@LoginActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
                     btnLogin.isEnabled = true

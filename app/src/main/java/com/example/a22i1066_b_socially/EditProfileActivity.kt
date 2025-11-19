@@ -44,10 +44,6 @@ class EditProfileActivity : AppCompatActivity() {
 
     private val TAG = "EditProfileActivity"
 
-    private val CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dihbswob7/image/upload"
-    private val UPLOAD_PRESET = "mobile_unsigned_preset"
-
-    private val client = OkHttpClient()
 
     private val pickLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
@@ -92,8 +88,11 @@ class EditProfileActivity : AppCompatActivity() {
         editEmail.isEnabled = false
 
         // Load profile from PHP backend
+        // Show email but make it non-editable
         loadProfileFromBackend(uid)
 
+        editEmail.isFocusable = false
+        editEmail.visibility = View.VISIBLE
         imgEdit.setOnClickListener { pickLauncher.launch("image/*") }
         changePhoto.setOnClickListener { pickLauncher.launch("image/*") }
 
@@ -184,81 +183,50 @@ class EditProfileActivity : AppCompatActivity() {
 
         val uri = selectedUri
         if (uri != null) {
-            val bytes = try {
-                contentResolver.openInputStream(uri)?.use { it.readBytes() }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to read image bytes", e)
-                null
-            }
+            lifecycleScope.launch {
+                try {
+                    val inputStream = contentResolver.openInputStream(uri)
+                    if (inputStream == null) {
+                        runOnUiThread {
+                            progressView.visibility = View.GONE
+                            saveBtn.isEnabled = true
+                            Toast.makeText(this@EditProfileActivity, "Failed to read selected image", Toast.LENGTH_LONG).show()
+                        }
+                        return@launch
+                    }
+                    val bytes = inputStream.readBytes()
+                    inputStream.close()
 
-            if (bytes == null) {
-                progressView.visibility = View.GONE
-                saveBtn.isEnabled = true
-                Toast.makeText(this, "Failed to read selected image", Toast.LENGTH_LONG).show()
-                return
-            }
+                    val requestBody = MultipartBody.Part.createFormData(
+                        "file",
+                        "profile_${uid}_${System.currentTimeMillis()}.jpg",
+                        bytes.toRequestBody("image/*".toMediaTypeOrNull())
+                    )
+                    val userIdBody = uid.toRequestBody("text/plain".toMediaTypeOrNull())
 
-            val mediaType = "image/*".toMediaTypeOrNull()
-            val fileBody = bytes.toRequestBody(mediaType)
-            val multipartBody = MultipartBody.Builder().setType(MultipartBody.FORM)
-                .addFormDataPart("file", "upload.jpg", fileBody)
-                .addFormDataPart("upload_preset", UPLOAD_PRESET)
-                .build()
+                    Log.d(TAG, "Uploading profile picture to backend...")
+                    val uploadResponse = RetrofitClient.instance.uploadProfilePic(userIdBody, requestBody)
 
-            val request = Request.Builder()
-                .url(CLOUDINARY_URL)
-                .post(multipartBody)
-                .build()
-
-            client.newCall(request).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    Log.e(TAG, "Cloudinary upload failed", e)
+                    if (uploadResponse.isSuccessful && uploadResponse.body()?.url != null) {
+                        val uploadedUrl = uploadResponse.body()!!.url
+                        Log.d(TAG, "Upload successful: $uploadedUrl")
+                        performBackendUpdate(uid, firstName, lastName, nameRaw, website, bio, uploadedUrl)
+                    } else {
+                        runOnUiThread {
+                            progressView.visibility = View.GONE
+                            saveBtn.isEnabled = true
+                            Toast.makeText(this@EditProfileActivity, "Failed to upload image", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Upload failed", e)
                     runOnUiThread {
                         progressView.visibility = View.GONE
                         saveBtn.isEnabled = true
                         Toast.makeText(this@EditProfileActivity, "Upload failed: ${e.message}", Toast.LENGTH_LONG).show()
                     }
                 }
-
-                override fun onResponse(call: Call, response: Response) {
-                    response.use {
-                        if (!it.isSuccessful) {
-                            val bodyStr = it.body?.string().orEmpty()
-                            Log.e(TAG, "Cloudinary response error: ${it.code} body=$bodyStr")
-                            runOnUiThread {
-                                progressView.visibility = View.GONE
-                                saveBtn.isEnabled = true
-                                Toast.makeText(this@EditProfileActivity, "Upload failed: ${it.code}", Toast.LENGTH_LONG).show()
-                            }
-                            return
-                        }
-
-                        val bodyStr = it.body?.string().orEmpty()
-                        try {
-                            val json = JSONObject(bodyStr)
-                            val secureUrl = json.optString("secure_url", json.optString("url"))
-                            if (secureUrl.isNullOrBlank()) {
-                                Log.e(TAG, "No secure_url in Cloudinary response: $bodyStr")
-                                runOnUiThread {
-                                    progressView.visibility = View.GONE
-                                    saveBtn.isEnabled = true
-                                    Toast.makeText(this@EditProfileActivity, "Upload succeeded but no URL returned", Toast.LENGTH_LONG).show()
-                                }
-                                return
-                            }
-
-                            performBackendUpdate(uid, firstName, lastName, nameRaw, website, bio, secureUrl)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to parse Cloudinary response", e)
-                            runOnUiThread {
-                                progressView.visibility = View.GONE
-                                saveBtn.isEnabled = true
-                                Toast.makeText(this@EditProfileActivity, "Upload succeeded but response invalid", Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    }
-                }
-            })
+            }
         } else {
             performBackendUpdate(uid, firstName, lastName, nameRaw, website, bio, null)
         }
@@ -323,4 +291,3 @@ class EditProfileActivity : AppCompatActivity() {
         }
     }
 }
-

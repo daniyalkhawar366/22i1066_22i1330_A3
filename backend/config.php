@@ -1,13 +1,16 @@
 <?php
-// Enable error reporting for debugging
+// Disable HTML error display for production
+ini_set('display_errors', '0');
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
 ini_set('log_errors', 1);
 ini_set('error_log', __DIR__ . '/php_errors.log');
 
 require_once __DIR__ . '/config/database.php';
 
-define('JWT_SECRET', 'your_secret_key_here_change_in_production_make_it_long_and_random');
+// Only define JWT_SECRET if not already defined
+if (!defined('JWT_SECRET')) {
+    define('JWT_SECRET', 'your_secret_key_here_change_in_production_make_it_long_and_random');
+}
 
 $database = new Database();
 $db = $database->getConnection();

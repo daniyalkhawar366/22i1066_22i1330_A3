@@ -1,4 +1,12 @@
 <?php
+// Start output buffering to prevent any output before JSON
+ob_start();
+
+require_once __DIR__ . '/config.php';
+
+// Clear any unwanted output
+ob_end_clean();
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
@@ -10,7 +18,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-require_once __DIR__ . '/../config.php';
 
 function generateJWT($userId) {
     $header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
@@ -132,6 +139,8 @@ if ($method === 'POST' && $action === 'login') {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
 
+        error_log("Login attempt for email: " . ($data['email'] ?? 'none'));
+
         if (empty($data['email']) || empty($data['password'])) {
             http_response_code(400);
             echo json_encode(['success' => false, 'error' => 'Email and password required']);
@@ -143,6 +152,7 @@ if ($method === 'POST' && $action === 'login') {
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user || !password_verify($data['password'], $user['password_hash'])) {
+            error_log("Login failed for: " . $data['email']);
             http_response_code(401);
             echo json_encode(['success' => false, 'error' => 'Invalid credentials']);
             exit();
@@ -150,15 +160,20 @@ if ($method === 'POST' && $action === 'login') {
 
         $token = generateJWT($user['id']);
 
-        echo json_encode([
+        error_log("Login successful for: " . $data['email']);
+
+        $response = [
             'success' => true,
             'token' => $token,
             'userId' => $user['id'],
             'username' => $user['username']
-        ]);
+        ];
+
+        echo json_encode($response);
         exit();
 
     } catch (Exception $e) {
+        error_log("Login exception: " . $e->getMessage());
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Login failed: ' . $e->getMessage()]);
         exit();

@@ -1,13 +1,19 @@
 package com.example.a22i1066_b_socially.network
 
+import com.google.gson.GsonBuilder
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.converter.scalars.ScalarsConverterFactory
 import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
     const val BASE_URL = "http://192.168.18.55/backend/api/"
+
+    private val gson = GsonBuilder()
+        .setLenient()
+        .create()
 
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor { chain ->
@@ -38,7 +44,8 @@ object RetrofitClient {
         Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(ScalarsConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
             .create(ApiService::class.java)
     }

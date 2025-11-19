@@ -97,6 +97,7 @@ class MyProfileActivity : AppCompatActivity() {
             val exploreBtn: ImageView = findViewById(R.id.explorepg)
             val postBtn: ImageView = findViewById(R.id.post)
             val notifBtn: ImageView = findViewById(R.id.notificationsfollowing)
+            val profileBtn: ImageView = findViewById(R.id.profile)
 
             menuBtn.setOnClickListener { showMenu() }
             // Account switcher - click username dropdown to show accounts
@@ -138,6 +139,10 @@ class MyProfileActivity : AppCompatActivity() {
                 startActivity(Intent(this, NotificationsFollowingActivity::class.java))
                 finish()
             }
+
+            // Profile button doesn't need click listener since we're already on profile page
+            // but we need to load the profile picture into it
+            loadBottomNavProfilePic(profileBtn, uid)
 
             loadProfile()
             loadUserPosts(uid)
@@ -428,6 +433,33 @@ class MyProfileActivity : AppCompatActivity() {
         loadingIndicator.visibility = View.GONE
         swipeRefresh.visibility = View.VISIBLE
         profileContent.visibility = View.VISIBLE
+    }
+
+    private fun loadBottomNavProfilePic(profileBtn: ImageView, userId: String) {
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserProfile(
+                    userId = userId,
+                    currentUserId = userId
+                )
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val profilePic = response.body()?.user?.profilePicUrl
+                    runOnUiThread {
+                        if (!profilePic.isNullOrBlank()) {
+                            Glide.with(this@MyProfileActivity)
+                                .load(profilePic)
+                                .circleCrop()
+                                .placeholder(R.drawable.profile_pic)
+                                .error(R.drawable.profile_pic)
+                                .into(profileBtn)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading bottom nav profile pic", e)
+            }
+        }
     }
 
     override fun onDestroy() {

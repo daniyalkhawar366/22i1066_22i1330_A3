@@ -1,12 +1,13 @@
 <?php
 ob_start();
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/../middleware/auth.php';
 ob_clean();
 
 header('Content-Type: application/json');
 
 try {
+    $db = getDB();
     $currentUserId = verifyToken();
     
     if (!$currentUserId) {

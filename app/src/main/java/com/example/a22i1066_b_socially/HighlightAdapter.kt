@@ -26,12 +26,14 @@ class HighlightAdapter(
         val titleText: TextView = view.findViewById(R.id.highlightTitle)
 
         init {
-            addImage.setImageResource(R.drawable.plus)
-            addImage.setPadding(20, 20, 20, 20)
-            addImage.scaleType = ImageView.ScaleType.FIT_CENTER
-            addImage.setColorFilter(0xFF8B5A5A.toInt())
-            titleText.text = "New Highlight"
-            addImage.setOnClickListener { onAddClick() }
+            addImage.setImageResource(R.drawable.ic_add)
+            addImage.setPadding(18, 18, 18, 18)
+            addImage.scaleType = ImageView.ScaleType.CENTER
+            addImage.background = view.context.getDrawable(R.drawable.circle_border_gray)
+            addImage.clearColorFilter()
+            titleText.text = "New"
+            titleText.setTextColor(0xFF999999.toInt())
+            view.setOnClickListener { onAddClick() }
         }
     }
 
