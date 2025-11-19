@@ -80,7 +80,14 @@ if ($method === 'GET' && $action === 'profile') {
 
 // Check follow status
 if ($method === 'GET' && $action === 'checkFollow') {
-    $authUserId = authenticateRequest();
+    try {
+        $authUserId = verifyToken();
+    } catch (Exception $e) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'error' => 'Unauthorized: ' . $e->getMessage()]);
+        exit;
+    }
+
     if (!$authUserId) {
         http_response_code(401);
         echo json_encode(['success' => false, 'error' => 'Unauthorized']);
@@ -117,7 +124,14 @@ if ($method === 'GET' && $action === 'checkFollow') {
 
 // Follow user
 if ($method === 'POST' && $action === 'follow') {
-    $authUserId = authenticateRequest();
+    try {
+        $authUserId = verifyToken();
+    } catch (Exception $e) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'error' => 'Unauthorized: ' . $e->getMessage()]);
+        exit;
+    }
+
     if (!$authUserId) {
         http_response_code(401);
         echo json_encode(['success' => false, 'error' => 'Unauthorized']);
@@ -182,7 +196,14 @@ if ($method === 'POST' && $action === 'follow') {
 
 // Unfollow user
 if ($method === 'POST' && $action === 'unfollow') {
-    $authUserId = authenticateRequest();
+    try {
+        $authUserId = verifyToken();
+    } catch (Exception $e) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'error' => 'Unauthorized: ' . $e->getMessage()]);
+        exit;
+    }
+
     if (!$authUserId) {
         http_response_code(401);
         echo json_encode(['success' => false, 'error' => 'Unauthorized']);
@@ -228,7 +249,14 @@ if ($method === 'POST' && $action === 'unfollow') {
 
 // Update user profile
 if ($method === 'POST' && $action === 'updateProfile') {
-    $authUserId = authenticateRequest();
+    try {
+        $authUserId = verifyToken();
+    } catch (Exception $e) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'error' => 'Unauthorized: ' . $e->getMessage()]);
+        exit;
+    }
+
     if (!$authUserId) {
         http_response_code(401);
         echo json_encode(['success' => false, 'error' => 'Unauthorized']);

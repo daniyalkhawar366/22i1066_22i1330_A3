@@ -1,26 +1,25 @@
 package com.example.a22i1066_b_socially
 
 import android.app.DatePickerDialog
-import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import com.google.firebase.Timestamp
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import androidx.lifecycle.lifecycleScope
+import com.example.a22i1066_b_socially.network.CreateHighlightRequest
+import com.example.a22i1066_b_socially.network.RetrofitClient
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
 import java.util.*
+import kotlinx.coroutines.launch
 
 class AddHighlightActivity : AppCompatActivity() {
 
@@ -33,8 +32,6 @@ class AddHighlightActivity : AppCompatActivity() {
     private val selectedImages = mutableListOf<Uri>()
     private var selectedDate: Date? = null
 
-    private val db = FirebaseFirestore.getInstance()
-    private val auth = FirebaseAuth.getInstance()
     private val client = OkHttpClient()
 
     private val CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dihbswob7/image/upload"
@@ -115,7 +112,7 @@ class AddHighlightActivity : AppCompatActivity() {
 
         uploadImagesToCloudinary { imageUrls ->
             if (imageUrls.isNotEmpty()) {
-                saveHighlightToFirestore(title, imageUrls)
+                saveHighlightToBackend(title, imageUrls)
             } else {
                 Toast.makeText(this, "Failed to upload images", Toast.LENGTH_SHORT).show()
                 uploadBtn.isEnabled = true
@@ -199,30 +196,46 @@ class AddHighlightActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveHighlightToFirestore(title: String, imageUrls: List<String>) {
-        val userId = auth.currentUser?.uid ?: return
+    private fun saveHighlightToBackend(title: String, imageUrls: List<String>) {
+        val sessionManager = SessionManager(this)
+        val token = "Bearer ${sessionManager.getAuthToken()}"
+        val dateTimestamp = selectedDate!!.time / 1000 // Convert to seconds
 
-        val highlight = hashMapOf(
-            "userId" to userId,
-            "title" to title,
-            "imageUrls" to imageUrls,
-            "date" to Timestamp(selectedDate!!)
-        )
+        Log.d(TAG, "Saving highlight to backend: $title with ${imageUrls.size} images")
 
-        Log.d(TAG, "Saving highlight to Firestore: $title with ${imageUrls.size} images")
+        lifecycleScope.launch {
+            try {
+                val request = CreateHighlightRequest(
+                    title = title,
+                    imageUrls = imageUrls,
+                    date = dateTimestamp
+                )
 
-        db.collection("highlights")
-            .add(highlight)
-            .addOnSuccessListener {
-                Log.d(TAG, "Highlight saved successfully")
-                Toast.makeText(this, "Highlight added!", Toast.LENGTH_SHORT).show()
-                finish()
+                val response = RetrofitClient.instance.createHighlight(token, request)
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    Log.d(TAG, "Highlight saved successfully")
+                    runOnUiThread {
+                        Toast.makeText(this@AddHighlightActivity, "Highlight added!", Toast.LENGTH_SHORT).show()
+                        finish()
+                    }
+                } else {
+                    val error = response.body()?.error ?: "Unknown error"
+                    Log.e(TAG, "Failed to save highlight: $error")
+                    runOnUiThread {
+                        Toast.makeText(this@AddHighlightActivity, "Failed to add highlight: $error", Toast.LENGTH_SHORT).show()
+                        uploadBtn.isEnabled = true
+                        uploadBtn.text = "Upload Highlight"
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving highlight", e)
+                runOnUiThread {
+                    Toast.makeText(this@AddHighlightActivity, "Failed to add highlight: ${e.message}", Toast.LENGTH_SHORT).show()
+                    uploadBtn.isEnabled = true
+                    uploadBtn.text = "Upload Highlight"
+                }
             }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to save highlight", e)
-                Toast.makeText(this, "Failed to add highlight: ${e.message}", Toast.LENGTH_SHORT).show()
-                uploadBtn.isEnabled = true
-                uploadBtn.text = "Upload Highlight"
-            }
+        }
     }
 }

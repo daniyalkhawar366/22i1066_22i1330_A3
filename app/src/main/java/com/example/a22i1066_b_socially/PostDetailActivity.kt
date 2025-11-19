@@ -1,5 +1,6 @@
 package com.example.a22i1066_b_socially
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -14,17 +15,13 @@ import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import com.bumptech.glide.Glide
 import com.example.a22i1066_b_socially.network.RetrofitClient
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import android.app.Activity
 import kotlinx.coroutines.launch
 
 
 class PostDetailActivity : AppCompatActivity() {
 
     private val db = FirebaseFirestore.getInstance()
-    private val auth = FirebaseAuth.getInstance()
     private val TAG = "PostDetailActivity"
 
     private lateinit var loadingIndicator: ProgressBar
@@ -52,7 +49,9 @@ class PostDetailActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.postpage)
 
-        currentUserId = auth.currentUser?.uid ?: ""
+        // Use SessionManager instead of Firebase Auth
+        val sessionManager = SessionManager(this)
+        currentUserId = sessionManager.getUserId() ?: ""
         if (currentUserId.isEmpty()) {
             finish()
             return
@@ -151,25 +150,9 @@ class PostDetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkIfLiked(postId: String) {
-        db.collection("posts").document(postId)
-            .collection("likes").document(currentUserId)
-            .get()
-            .addOnSuccessListener { doc ->
-                isLiked = doc.exists()
-                currentPost?.let { post ->
-                    displayPost(post.copy(isLikedByCurrentUser = isLiked))
-                }
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to check like status", e)
-                // Still display post even if like check fails
-                currentPost?.let { displayPost(it) }
-            }
-    }
-
     private fun displayPost(post: Post) {
         currentPost = post
+        isLiked = post.isLikedByCurrentUser
 
         usernameText.text = post.username
         captionUsername.text = post.username
@@ -184,14 +167,8 @@ class PostDetailActivity : AppCompatActivity() {
             val adapter = PostImageAdapter(post.imageUrls)
             imageViewPager.adapter = adapter
 
-            imageCounter.text = "1/${post.imageUrls.size}"
-            imageCounter.visibility = if (post.imageUrls.size > 1) View.VISIBLE else View.GONE
-
-            imageViewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
-                override fun onPageSelected(position: Int) {
-                    imageCounter.text = "${position + 1}/${post.imageUrls.size}"
-                }
-            })
+            // Hide image counter - posts already have their own indicators
+            imageCounter.visibility = View.GONE
         }
 
         updateLikeButton()
@@ -202,43 +179,39 @@ class PostDetailActivity : AppCompatActivity() {
 
     private fun toggleLike() {
         val post = currentPost ?: return
-        val postRef = db.collection("posts").document(post.id)
-        val likeRef = postRef.collection("likes").document(currentUserId)
 
-        if (isLiked) {
-            // Unlike
-            likeRef.delete()
-            postRef.update("likesCount", FieldValue.increment(-1))
-                .addOnSuccessListener {
-                    isLiked = false
-                    currentPost = post.copy(
-                        likesCount = post.likesCount - 1,
-                        isLikedByCurrentUser = false
-                    )
-                    updateLikeButton()
-                    likesText.text = "${currentPost?.likesCount} likes"
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@PostDetailActivity).getAuthToken()}"
+                val response = RetrofitClient.instance.togglePostLike(
+                    token,
+                    com.example.a22i1066_b_socially.network.ToggleLikeRequest(post.id)
+                )
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val newIsLiked = response.body()?.isLiked ?: false
+                    val newLikesCount = response.body()?.likesCount ?: 0
+
+                    runOnUiThread {
+                        isLiked = newIsLiked
+                        currentPost = post.copy(
+                            likesCount = newLikesCount,
+                            isLikedByCurrentUser = newIsLiked
+                        )
+                        updateLikeButton()
+                        likesText.text = "$newLikesCount likes"
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this@PostDetailActivity, "Failed to update like", Toast.LENGTH_SHORT).show()
+                    }
                 }
-                .addOnFailureListener { e ->
-                    Log.e(TAG, "Failed to unlike", e)
-                    Toast.makeText(this, "Failed to unlike post", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error toggling like", e)
+                runOnUiThread {
+                    Toast.makeText(this@PostDetailActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
-        } else {
-            // Like
-            likeRef.set(mapOf("timestamp" to FieldValue.serverTimestamp()))
-            postRef.update("likesCount", FieldValue.increment(1))
-                .addOnSuccessListener {
-                    isLiked = true
-                    currentPost = post.copy(
-                        likesCount = post.likesCount + 1,
-                        isLikedByCurrentUser = true
-                    )
-                    updateLikeButton()
-                    likesText.text = "${currentPost?.likesCount} likes"
-                }
-                .addOnFailureListener { e ->
-                    Log.e(TAG, "Failed to like", e)
-                    Toast.makeText(this, "Failed to like post", Toast.LENGTH_SHORT).show()
-                }
+            }
         }
     }
 
@@ -254,22 +227,26 @@ class PostDetailActivity : AppCompatActivity() {
 
     private fun handleComment() {
         val post = currentPost ?: return
-        Log.d(TAG, "Comment clicked for post: ${post.id}")
-        Toast.makeText(this, "Comments coming soon!", Toast.LENGTH_SHORT).show()
+        val intent = Intent(this, CommentsActivity::class.java)
+        intent.putExtra("postId", post.id)
+        startActivity(intent)
     }
 
     private fun handleShare() {
         val post = currentPost ?: return
-        Log.d(TAG, "Share clicked for post: ${post.id}")
-        Toast.makeText(this, "Share coming soon!", Toast.LENGTH_SHORT).show()
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, "Check out this post by ${post.username}!")
+        }
+        startActivity(Intent.createChooser(shareIntent, "Share via"))
     }
 
     private fun openProfile() {
         val post = currentPost ?: return
         if (post.userId == currentUserId) {
-            startActivity(android.content.Intent(this, MyProfileActivity::class.java))
+            startActivity(Intent(this, MyProfileActivity::class.java))
         } else {
-            val intent = android.content.Intent(this, ProfileActivity::class.java)
+            val intent = Intent(this, ProfileActivity::class.java)
             intent.putExtra("userId", post.userId)
             startActivity(intent)
         }
@@ -320,18 +297,44 @@ class PostDetailActivity : AppCompatActivity() {
         loadingIndicator.visibility = View.VISIBLE
         postContent.visibility = View.GONE
 
-        db.collection("posts").document(post.id)
-            .delete()
-            .addOnSuccessListener {
-                Toast.makeText(this, "Post deleted successfully", Toast.LENGTH_SHORT).show()
-                setResult(Activity.RESULT_OK)
-                finish()
-            }
-            .addOnFailureListener { e ->
+        lifecycleScope.launch {
+            try {
+                val token = "Bearer ${SessionManager(this@PostDetailActivity).getAuthToken()}"
+                val response = RetrofitClient.instance.deletePost(
+                    token,
+                    com.example.a22i1066_b_socially.network.DeletePostRequest(post.id)
+                )
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    runOnUiThread {
+                        Toast.makeText(this@PostDetailActivity, "Post deleted successfully", Toast.LENGTH_SHORT).show()
+                        setResult(RESULT_OK)
+                        finish()
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@PostDetailActivity,
+                            "Failed to delete post: ${response.body()?.error ?: "Unknown error"}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        loadingIndicator.visibility = View.GONE
+                        postContent.visibility = View.VISIBLE
+                    }
+                }
+            } catch (e: Exception) {
                 Log.e(TAG, "Error deleting post", e)
-                Toast.makeText(this, "Failed to delete post", Toast.LENGTH_SHORT).show()
-                loadingIndicator.visibility = View.GONE
-                postContent.visibility = View.VISIBLE
+                runOnUiThread {
+                    Toast.makeText(
+                        this@PostDetailActivity,
+                        "Error deleting post: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    loadingIndicator.visibility = View.GONE
+                    postContent.visibility = View.VISIBLE
+                }
             }
+        }
     }
 }
+

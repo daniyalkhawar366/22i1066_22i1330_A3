@@ -83,8 +83,13 @@ class LoginActivity : AppCompatActivity() {
                     val token = response.body()?.token ?: ""
                     val userId = response.body()?.userId ?: ""
 
-                    // Save session
-                    sessionManager.saveAuthToken(token, userId)
+                    // Get username from API - fetch user profile
+                    val profileResponse = RetrofitClient.instance.getUserProfile("profile", userId)
+                    val username = profileResponse.body()?.user?.username ?: ""
+                    val profilePicUrl = profileResponse.body()?.user?.profilePicUrl ?: ""
+
+                    // Save session with email, username, and profile pic
+                    sessionManager.saveAuthToken(token, userId, username, email, profilePicUrl)
 
                     runOnUiThread {
                         Toast.makeText(this@LoginActivity, "Login Successful", Toast.LENGTH_SHORT).show()
@@ -104,7 +109,7 @@ class LoginActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 runOnUiThread {
-                    Toast.makeText(this@LoginActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@LoginActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
                     btnLogin.isEnabled = true
                 }
             }

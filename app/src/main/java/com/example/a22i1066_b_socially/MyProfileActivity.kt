@@ -1,13 +1,11 @@
 package com.example.a22i1066_b_socially
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.ImageView
-import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -23,9 +21,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import android.widget.Toast
-import kotlin.collections.remove
 import androidx.appcompat.app.AlertDialog
-import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.launch
 
 
@@ -58,6 +54,8 @@ class MyProfileActivity : AppCompatActivity() {
 
     private val TAG = "MyProfileActivity"
 
+    private lateinit var usernameDropdown: View // Fixed: usernameDropdown is a LinearLayout, not TextView
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -78,6 +76,7 @@ class MyProfileActivity : AppCompatActivity() {
             profileContent = findViewById(R.id.profileContent)
             swipeRefresh = findViewById(R.id.swipeRefresh)
             toolbarUsername = findViewById(R.id.toolbarUsername)
+            usernameDropdown = findViewById(R.id.usernameDropdown)
             menuBtn = findViewById(R.id.menuBtn)
             profileImage = findViewById(R.id.profile_image)
             displayName = findViewById(R.id.displayName)
@@ -99,7 +98,10 @@ class MyProfileActivity : AppCompatActivity() {
             val postBtn: ImageView = findViewById(R.id.post)
             val notifBtn: ImageView = findViewById(R.id.notificationsfollowing)
 
-            menuBtn.setOnClickListener { showMenu(it as ImageView) }
+            menuBtn.setOnClickListener { showMenu() }
+            // Account switcher - click username dropdown to show accounts
+            usernameDropdown.setOnClickListener { showAccountSwitcher() }
+
 
             editProfileBtn.setOnClickListener {
                 startActivity(Intent(this, EditProfileActivity::class.java))
@@ -116,14 +118,14 @@ class MyProfileActivity : AppCompatActivity() {
             }
             followersCount.setOnClickListener {
                 val intent = Intent(this, FollowersFollowingActivity::class.java)
-                intent.putExtra("userId", uid ?: "")
+                intent.putExtra("userId", uid)
                 intent.putExtra("listType", "followers")
                 startActivity(intent)
             }
 
             followingCount.setOnClickListener {
                 val intent = Intent(this, FollowersFollowingActivity::class.java)
-                intent.putExtra("userId", uid ?: "")
+                intent.putExtra("userId", uid)
                 intent.putExtra("listType", "following")
                 startActivity(intent)
             }
@@ -196,7 +198,7 @@ class MyProfileActivity : AppCompatActivity() {
         postsRecyclerView.adapter = postsAdapter
     }
 
-    private fun showMenu(anchor: ImageView) {
+    private fun showMenu() { // Removed unused anchor parameter
         val builder = AlertDialog.Builder(this)
         builder.setTitle("Menu")
         builder.setItems(arrayOf("Logout")) { _, which ->
@@ -208,13 +210,83 @@ class MyProfileActivity : AppCompatActivity() {
         builder.show()
     }
 
+    private fun showAccountSwitcher() {
+        val multiAccountManager = MultiAccountManager(this)
+        val accounts = multiAccountManager.getAllAccounts() // Correct method name
+        val currentAccountId = multiAccountManager.getCurrentAccountId()
+
+        if (accounts.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("Account Switcher")
+                .setMessage("No saved accounts found. Would you like to add another account?")
+                .setPositiveButton("Add Account") { _, _ ->
+                    val intent = Intent(this, LoginActivity::class.java)
+                    startActivity(intent)
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+            return
+        }
+
+        val accountNames = accounts.map { account: AccountInfo ->
+            if (account.userId == currentAccountId) {
+                "✓ ${account.username}"
+            } else {
+                account.username
+            }
+        }.toTypedArray()
+
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle("Switch Account (${accounts.size} account${if (accounts.size > 1) "s" else ""})")
+        builder.setItems(accountNames) { _: android.content.DialogInterface, which: Int ->
+            val selectedAccount = accounts[which]
+            if (selectedAccount.userId != currentAccountId) {
+                switchToAccount(selectedAccount.userId)
+            } else {
+                Toast.makeText(this, "Already using this account", Toast.LENGTH_SHORT).show()
+            }
+        }
+        builder.setNeutralButton("Add Account") { _: android.content.DialogInterface, _: Int ->
+            val intent = Intent(this, LoginActivity::class.java)
+            startActivity(intent)
+        }
+        builder.setNegativeButton("Cancel", null)
+        builder.show()
+    }
+
+    private fun switchToAccount(userId: String) {
+        val multiAccountManager = MultiAccountManager(this)
+        val account = multiAccountManager.switchAccount(userId)
+
+        if (account != null) {
+            Toast.makeText(this, "Switched to ${account.username}", Toast.LENGTH_SHORT).show()
+
+            // Restart the activity to load new account data
+            val intent = Intent(this, MyProfileActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+            startActivity(intent)
+            finish()
+        } else {
+            Toast.makeText(this, "Failed to switch account", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun confirmLogout() {
         AlertDialog.Builder(this)
             .setTitle("Logout")
             .setMessage("Are you sure you want to logout?")
             .setPositiveButton("Logout") { _, _ ->
+                // Clear SessionManager
+                val sessionManager = SessionManager(this)
+                sessionManager.clearSession()
+
+                // Sign out from Firebase Auth
                 auth.signOut()
-                startActivity(Intent(this, LoginActivity::class.java))
+
+                // Navigate to login and clear the entire activity stack
+                val intent = Intent(this, LoginActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                startActivity(intent)
                 finish()
             }
             .setNegativeButton("Cancel", null)
@@ -317,32 +389,33 @@ class MyProfileActivity : AppCompatActivity() {
     }
 
     private fun loadHighlights(uid: String) {
-        highlightsListener = db.collection("highlights")
-            .whereEqualTo("userId", uid)
-            .orderBy("date", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Failed to load highlights", error)
-                    return@addSnapshotListener
-                }
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserHighlights(uid)
 
-                val highlights = snapshot?.documents?.mapNotNull { doc ->
-                    try {
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val highlightItems = response.body()?.highlights ?: emptyList()
+
+                    val highlights = highlightItems.map { item ->
                         Highlight(
-                            id = doc.id,
-                            userId = doc.getString("userId") ?: "",
-                            title = doc.getString("title") ?: "",
-                            imageUrls = doc.get("imageUrls") as? List<String> ?: emptyList(),
-                            date = doc.getTimestamp("date")
+                            id = item.id,
+                            userId = item.userId ?: item.user_id ?: "",
+                            title = item.title,
+                            imageUrls = item.imageUrls,
+                            date = item.date
                         )
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing highlight", e)
-                        null
                     }
-                } ?: emptyList()
 
-                highlightAdapter.updateHighlights(highlights)
+                    runOnUiThread {
+                        highlightAdapter.updateHighlights(highlights)
+                    }
+                } else {
+                    Log.e(TAG, "Failed to load highlights: ${response.body()?.error}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading highlights", e)
             }
+        }
     }
 
     private fun openHighlight(highlight: Highlight) {

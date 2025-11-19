@@ -390,7 +390,7 @@ class ProfileActivity : AppCompatActivity() {
                             userId = doc.getString("userId") ?: "",
                             title = doc.getString("title") ?: "",
                             imageUrls = doc.get("imageUrls") as? List<String> ?: emptyList(),
-                            date = doc.getTimestamp("date")
+                            date = doc.getTimestamp("date")?.toDate()?.time ?: 0L // Convert Timestamp? to Long (milliseconds)
                         )
                     } catch (e: Exception) {
                         Log.e(TAG, "Error parsing highlight", e)
@@ -630,4 +630,3 @@ class ProfileActivity : AppCompatActivity() {
         highlightsListener = null
     }
 }
-

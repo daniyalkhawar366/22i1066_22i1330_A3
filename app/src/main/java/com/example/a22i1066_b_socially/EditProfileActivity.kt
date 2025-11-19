@@ -76,7 +76,11 @@ class EditProfileActivity : AppCompatActivity() {
         progressView.visibility = View.VISIBLE
         contentScroll.visibility = View.GONE
 
-        val uid = auth.currentUser?.uid
+        // Use SessionManager instead of Firebase Auth
+        val sessionManager = SessionManager(this)
+        val uid = sessionManager.getUserId()
+        val email = sessionManager.getEmail()
+
         if (uid.isNullOrBlank()) {
             Toast.makeText(this, "Not signed in", Toast.LENGTH_SHORT).show()
             setResult(RESULT_CANCELED)
@@ -84,7 +88,7 @@ class EditProfileActivity : AppCompatActivity() {
             return
         }
 
-        editEmail.setText(auth.currentUser?.email ?: "")
+        editEmail.setText(email ?: "")
         editEmail.isEnabled = false
 
         // Load profile from PHP backend
@@ -101,14 +105,7 @@ class EditProfileActivity : AppCompatActivity() {
         saveBtn.setOnClickListener {
             saveBtn.isEnabled = false
             progressView.visibility = View.VISIBLE
-            val currentUid = auth.currentUser?.uid
-            if (currentUid == null) {
-                Toast.makeText(this, "Not signed in", Toast.LENGTH_SHORT).show()
-                setResult(RESULT_CANCELED)
-                finish()
-                return@setOnClickListener
-            }
-            saveProfile(currentUid)
+            saveProfile(uid)
         }
     }
 

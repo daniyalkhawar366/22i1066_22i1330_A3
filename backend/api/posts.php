@@ -340,9 +340,20 @@ elseif ($method === 'POST' && $action === 'deletePost') {
     $data = json_decode($input, true);
     $postId = $data['postId'] ?? '';
 
+    // Delete the post (images will be deleted automatically due to ON DELETE CASCADE)
     $stmt = $db->prepare("DELETE FROM posts WHERE id = ? AND user_id = ?");
     $stmt->bind_param("ss", $postId, $currentUserId);
     $stmt->execute();
+
+    // If post was deleted, decrement the user's posts_count
+    if ($stmt->affected_rows > 0) {
+        $updateStmt = $db->prepare("UPDATE users SET posts_count = GREATEST(0, posts_count - 1) WHERE id = ?");
+        $updateStmt->bind_param("s", $currentUserId);
+        $updateStmt->execute();
+        $updateStmt->close();
+    }
+
+    $stmt->close();
 
     echo json_encode(['success' => true]);
 }

@@ -199,16 +199,39 @@ interface ApiService {
         @Body request: SendMessageRequest
     ): Response<SendMessageResponse>
 
-    @POST("messages.php?action=editMessage")
+    @POST("messages.php?action=edit")
     suspend fun editMessage(
         @Header("Authorization") token: String,
         @Body request: EditMessageRequest
     ): Response<SimpleResponse>
 
-    @POST("messages.php?action=deleteMessage")
+    @POST("messages.php?action=delete")
     suspend fun deleteMessage(
         @Header("Authorization") token: String,
         @Body request: DeleteMessageRequest
+    ): Response<SimpleResponse>
+
+    // Highlights API
+    @POST("highlights.php?action=create")
+    suspend fun createHighlight(
+        @Header("Authorization") token: String,
+        @Body request: CreateHighlightRequest
+    ): Response<CreateHighlightResponse>
+
+    @GET("highlights.php?action=getUserHighlights")
+    suspend fun getUserHighlights(
+        @Query("userId") userId: String
+    ): Response<HighlightsResponse>
+
+    @GET("highlights.php?action=getHighlight")
+    suspend fun getHighlight(
+        @Query("highlightId") highlightId: String
+    ): Response<SingleHighlightResponse>
+
+    @DELETE("highlights.php?action=delete")
+    suspend fun deleteHighlight(
+        @Header("Authorization") token: String,
+        @Query("highlightId") highlightId: String
     ): Response<SimpleResponse>
 
     // Story endpoints
@@ -382,3 +405,37 @@ data class SearchUsersResponse(
     val error: String?
 )
 
+// Highlights API data classes
+data class CreateHighlightRequest(
+    val title: String,
+    val imageUrls: List<String>,
+    val date: Long // Unix timestamp in seconds
+)
+
+data class CreateHighlightResponse(
+    val success: Boolean,
+    val highlightId: String?,
+    val message: String?,
+    val error: String?
+)
+
+data class HighlightItem(
+    val id: String,
+    val userId: String? = null,
+    val user_id: String? = null,
+    val title: String,
+    val imageUrls: List<String>,
+    val date: Long
+)
+
+data class HighlightsResponse(
+    val success: Boolean,
+    val highlights: List<HighlightItem>?,
+    val error: String?
+)
+
+data class SingleHighlightResponse(
+    val success: Boolean,
+    val highlight: HighlightItem?,
+    val error: String?
+)

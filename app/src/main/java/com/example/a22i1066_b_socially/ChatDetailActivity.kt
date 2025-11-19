@@ -9,7 +9,6 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
-import android.view.View
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
@@ -28,7 +27,6 @@ import com.example.a22i1066_b_socially.network.RetrofitClient
 import com.example.a22i1066_b_socially.network.SendMessageRequest
 import com.example.a22i1066_b_socially.network.EditMessageRequest
 import com.example.a22i1066_b_socially.network.DeleteMessageRequest
-import com.example.a22i1066_b_socially.SessionManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import okhttp3.*
@@ -36,7 +34,6 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
-import kotlin.text.clear
 
 class ChatDetailActivity : AppCompatActivity() {
 
