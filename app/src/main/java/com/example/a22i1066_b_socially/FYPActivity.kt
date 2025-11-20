@@ -19,6 +19,8 @@ import com.bumptech.glide.Glide
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessaging
 import com.example.a22i1066_b_socially.network.RetrofitClient
+import com.example.a22i1066_b_socially.offline.OfflineManager
+import com.example.a22i1066_b_socially.offline.OfflineIntegrationHelper
 
 class FYPActivity : AppCompatActivity() {
     private val TAG = "FYPActivity"
@@ -265,10 +267,58 @@ class FYPActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val token = "Bearer ${SessionManager(this@FYPActivity).getAuthToken()}"
+                val offlineManager = OfflineManager(this@FYPActivity)
+                val isOnline = OfflineIntegrationHelper.isOnline(this@FYPActivity)
+
                 Log.d(TAG, "========================================")
-                Log.d(TAG, "Loading posts from feed...")
+                Log.d(TAG, "Loading posts from feed... (Online: $isOnline)")
                 Log.d(TAG, "Token: ${token.take(20)}...")
 
+                if (!isOnline) {
+                    // Load from cache when offline
+                    Log.d(TAG, "Device offline - loading from cache")
+                    val cachedPosts = offlineManager.getCachedPosts(limit = 50)
+
+                    if (cachedPosts.isNotEmpty()) {
+                        Log.d(TAG, "Loaded ${cachedPosts.size} cached posts")
+                        posts.clear()
+
+                        cachedPosts.forEach { cachedPost ->
+                            posts.add(Post(
+                                id = cachedPost.id,
+                                userId = cachedPost.userId,
+                                username = cachedPost.username,
+                                profilePicUrl = cachedPost.profilePicUrl ?: "",
+                                imageUrls = cachedPost.imageUrls,
+                                caption = cachedPost.caption,
+                                timestamp = cachedPost.timestamp,
+                                likesCount = cachedPost.likesCount,
+                                commentsCount = cachedPost.commentsCount,
+                                isLikedByCurrentUser = cachedPost.isLiked,
+                                previewComments = emptyList()
+                            ))
+                        }
+
+                        runOnUiThread {
+                            adapter.updatePosts(posts.toList())
+                            swipeRefresh.isRefreshing = false
+                            // Silently load cached posts - no toast notification
+                        }
+                        return@launch
+                    } else {
+                        runOnUiThread {
+                            swipeRefresh.isRefreshing = false
+                            Toast.makeText(
+                                this@FYPActivity,
+                                "No cached posts available. Please connect to internet.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        return@launch
+                    }
+                }
+
+                // Load from server when online
                 val response = RetrofitClient.instance.getPostsFeed(token)
 
                 Log.d(TAG, "Posts response code: ${response.code()}")
@@ -282,6 +332,20 @@ class FYPActivity : AppCompatActivity() {
                     posts.clear()
                     postsData.forEach { postItem ->
                         Log.d(TAG, "Post ${postItem.id}: ${postItem.imageUrls.size} images, ${postItem.previewComments?.size ?: 0} preview comments")
+
+                        // Cache post for offline access
+                        offlineManager.cachePost(
+                            id = postItem.id,
+                            userId = postItem.userId,
+                            username = postItem.username,
+                            profilePicUrl = postItem.profilePicUrl,
+                            caption = postItem.caption,
+                            imageUrls = postItem.imageUrls,
+                            timestamp = postItem.timestamp,
+                            likesCount = postItem.likesCount,
+                            commentsCount = postItem.commentsCount,
+                            isLiked = postItem.isLikedByCurrentUser
+                        )
 
                         // Map preview comments from API to Comment objects
                         val previewComments = postItem.previewComments?.map { commentItem ->

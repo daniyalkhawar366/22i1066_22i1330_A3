@@ -13,7 +13,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
-import com.bumptech.glide.Glide
+import com.example.a22i1066_b_socially.offline.OfflineIntegrationHelper
 
 class PostAdapter(
     private val posts: MutableList<Post>,
@@ -55,21 +55,23 @@ class PostAdapter(
 
         holder.username.text = post.username
 
-        // Load profile pic
+        // Load profile pic with offline caching
         if (post.profilePicUrl.isNotBlank()) {
-            Glide.with(holder.itemView.context)
-                .load(post.profilePicUrl)
-                .circleCrop()
-                .placeholder(R.drawable.profile_pic)
-                .error(R.drawable.profile_pic)
-                .into(holder.profilePic)
+            OfflineIntegrationHelper.loadImage(
+                holder.profilePic,
+                post.profilePicUrl,
+                R.drawable.profile_pic,
+                R.drawable.profile_pic,
+                circular = true
+            )
 
-            Glide.with(holder.itemView.context)
-                .load(post.profilePicUrl)
-                .circleCrop()
-                .placeholder(R.drawable.profile_pic)
-                .error(R.drawable.profile_pic)
-                .into(holder.captionProfilePic)
+            OfflineIntegrationHelper.loadImage(
+                holder.captionProfilePic,
+                post.profilePicUrl,
+                R.drawable.profile_pic,
+                R.drawable.profile_pic,
+                circular = true
+            )
         } else {
             holder.profilePic.setImageResource(R.drawable.profile_pic)
             holder.captionProfilePic.setImageResource(R.drawable.profile_pic)

@@ -17,6 +17,7 @@
     <uses-feature android:name="android.hardware.camera" required="false"/>
 
     <application
+        android:name=".MyApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -210,11 +211,14 @@
             android:exported="false"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
 
-
-
-
-
-
+        <!-- Network change receiver for auto-sync when coming online -->
+        <receiver
+            android:name=".offline.NetworkChangeReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

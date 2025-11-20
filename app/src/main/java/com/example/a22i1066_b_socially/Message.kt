@@ -8,7 +8,8 @@ data class Message(
     val timestamp: Long = 0L,
     val imageUrls: List<String> = emptyList(),
     val type: String = "text",
-    val postId: String? = null  // Add this
+    val postId: String? = null,
+    val status: String = "sent" // "sent", "pending", "failed"
 )
 
 

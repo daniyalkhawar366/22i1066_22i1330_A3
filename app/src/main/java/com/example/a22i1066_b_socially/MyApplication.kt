@@ -4,6 +4,8 @@ package com.example.a22i1066_b_socially
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import com.example.a22i1066_b_socially.offline.PicassoImageLoader
+import com.example.a22i1066_b_socially.offline.SyncWorker
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ServerValue
@@ -15,6 +17,23 @@ class MyApplication : Application(), Application.ActivityLifecycleCallbacks {
     override fun onCreate() {
         super.onCreate()
         registerActivityLifecycleCallbacks(this)
+
+        // Initialize offline support
+        initializeOfflineSupport()
+    }
+
+    private fun initializeOfflineSupport() {
+        try {
+            // Initialize Picasso with caching
+            PicassoImageLoader.initialize(this)
+
+            // Schedule periodic background sync
+            SyncWorker.schedulePeriodicSync(this)
+
+            android.util.Log.d("MyApplication", "Offline support initialized successfully")
+        } catch (e: Exception) {
+            android.util.Log.e("MyApplication", "Error initializing offline support", e)
+        }
     }
 
     private fun setOnline(online: Boolean) {
@@ -25,6 +44,9 @@ class MyApplication : Application(), Application.ActivityLifecycleCallbacks {
             // ensure onDisconnect will mark offline if connection drops
             ref.onDisconnect().setValue(mapOf("online" to false, "lastChanged" to ServerValue.TIMESTAMP))
             ref.setValue(mapOf("online" to true) + now)
+
+            // Trigger sync when coming online
+            SyncWorker.scheduleImmediateSync(this)
         } else {
             ref.setValue(mapOf("online" to false) + now)
         }

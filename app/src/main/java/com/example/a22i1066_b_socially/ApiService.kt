@@ -81,7 +81,7 @@ data class UserListResponse(
 data class SendMessageRequest(
     val receiverId: String,
     val text: String,
-    val imageUrls: List<String>
+    val imageUrls: List<String> = emptyList()
 )
 
 data class SendMessageResponse(
@@ -99,6 +99,12 @@ data class DeleteMessageRequest(
     val messageId: String
 )
 
+// Additional request types for offline sync
+data class PostActionRequest(
+    val postId: String
+)
+
+
 data class SimpleResponse(
     val success: Boolean,
     val error: String?,
@@ -112,8 +118,11 @@ data class FollowStatusResponse(
 )
 
 data class FollowRequest(
-    val targetUserId: String
-)
+    val targetUserId: String? = null,
+    val userId: String? = null
+) {
+    fun resolveTargetUserId(): String = targetUserId ?: userId ?: ""
+}
 
 data class UpdateProfileRequest(
     val displayName: String? = null,
@@ -295,7 +304,8 @@ interface ApiService {
     @POST("messages.php?action=uploadImage")
     suspend fun uploadMessageImage(
         @Header("Authorization") token: String,
-        @Part image: MultipartBody.Part
+        @Part image: MultipartBody.Part,
+        @Part("receiverId") receiverId: RequestBody
     ): Response<UploadResponse>
 
     @POST("messages.php?action=updateActivity")
@@ -344,6 +354,14 @@ interface ApiService {
         @Body request: UploadStoryRequest
     ): Response<UploadStoryResponse>
 
+    @Multipart
+    @POST("stories.php?action=upload")
+    suspend fun uploadStoryMultipart(
+        @Header("Authorization") token: String,
+        @Part media: MultipartBody.Part,
+        @Part("type") type: RequestBody
+    ): Response<UploadStoryResponse>
+
     @POST("stories.php?action=delete")
     suspend fun deleteStory(
         @Header("Authorization") token: String,
@@ -355,6 +373,14 @@ interface ApiService {
     suspend fun createPost(
         @Header("Authorization") token: String,
         @Body request: CreatePostRequest
+    ): Response<CreatePostResponse>
+
+    @Multipart
+    @POST("posts.php?action=create")
+    suspend fun createPostMultipart(
+        @Header("Authorization") token: String,
+        @Part images: List<MultipartBody.Part>,
+        @Part("caption") caption: RequestBody
     ): Response<CreatePostResponse>
 
     @GET("posts.php?action=getFeed")
@@ -375,6 +401,30 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Body request: ToggleLikeRequest
     ): Response<ToggleLikeResponse>
+
+    @POST("posts.php?action=toggleLike")
+    suspend fun likePost(
+        @Header("Authorization") token: String,
+        @Body request: PostActionRequest
+    ): Response<SimpleResponse>
+
+    @POST("posts.php?action=toggleLike")
+    suspend fun unlikePost(
+        @Header("Authorization") token: String,
+        @Body request: PostActionRequest
+    ): Response<SimpleResponse>
+
+    @POST("posts.php?action=savePost")
+    suspend fun savePost(
+        @Header("Authorization") token: String,
+        @Body request: PostActionRequest
+    ): Response<SimpleResponse>
+
+    @POST("posts.php?action=unsavePost")
+    suspend fun unsavePost(
+        @Header("Authorization") token: String,
+        @Body request: PostActionRequest
+    ): Response<SimpleResponse>
 
     @POST("posts.php?action=addComment")
     suspend fun addComment(

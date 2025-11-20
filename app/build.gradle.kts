@@ -1,6 +1,3 @@
-import org.gradle.kotlin.dsl.invoke
-import kotlin.plus
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -62,6 +59,7 @@ dependencies {
     implementation("com.github.bumptech.glide:glide:4.16.0")
     implementation("com.google.firebase:firebase-storage")
     implementation("com.github.bumptech.glide:glide:4.15.1")
+    implementation("com.squareup.picasso:picasso:2.8")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.11.0")
@@ -78,6 +76,14 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("com.google.auth:google-auth-library-oauth2-http:1.19.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    // WorkManager for background sync
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    // Room for SQLite database
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    kapt("androidx.room:room-compiler:2.6.1")
 
 
 

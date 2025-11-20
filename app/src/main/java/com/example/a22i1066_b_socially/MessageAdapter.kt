@@ -58,8 +58,18 @@ class MessageAdapter(
     inner class SentMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val messageText: TextView = itemView.findViewById(R.id.messageText)
         private val imagesContainer: LinearLayout = itemView.findViewById(R.id.imagesContainer)
+        private val statusIndicator: TextView = itemView.findViewById(R.id.statusIndicator)
 
         fun bind(message: Message) {
+            // Show status indicator (exclamation mark) for pending messages
+            if (message.status == "pending") {
+                statusIndicator.visibility = View.VISIBLE
+                statusIndicator.text = "!"
+                statusIndicator.setTextColor(0xFFFF6B6B.toInt()) // Red color
+            } else {
+                statusIndicator.visibility = View.GONE
+            }
+
             // Handle text
             if (message.text.isNotBlank()) {
                 messageText.visibility = View.VISIBLE

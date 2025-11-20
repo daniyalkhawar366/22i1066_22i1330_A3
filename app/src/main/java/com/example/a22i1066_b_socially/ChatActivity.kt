@@ -16,11 +16,11 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.a22i1066_b_socially.network.RetrofitClient
-import com.example.a22i1066_b_socially.SessionManager
+import com.example.a22i1066_b_socially.offline.OfflineIntegrationHelper
+import com.example.a22i1066_b_socially.offline.OfflineManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.*
-import kotlin.text.clear
 
 class ChatActivity : AppCompatActivity() {
     private val TAG = "ChatActivity"
@@ -182,6 +182,36 @@ class ChatActivity : AppCompatActivity() {
             return
         }
 
+        val isOnline = OfflineIntegrationHelper.isOnline(this)
+        if (!isOnline) {
+            // Load cached chats/messages if offline
+            lifecycleScope.launch {
+                val offlineManager = OfflineManager(this@ChatActivity)
+                val cachedChats = offlineManager.getCachedChats(currentUserId)
+                allUsers.clear()
+                cachedChats.forEach { chat ->
+                    if (chat.otherUserId != currentUserId) {
+                        allUsers.add(
+                            User(
+                                id = chat.otherUserId,
+                                username = chat.otherUsername,
+                                profilePicUrl = chat.otherProfilePic,
+                                lastMessage = chat.lastMessage,
+                                lastTimestamp = chat.lastTimestamp,
+                                isOnline = false // Can't know online status offline
+                            )
+                        )
+                    }
+                }
+                sortAllUsers()
+                applyFilter(currentQuery)
+                recyclerView.visibility = View.VISIBLE
+                progressLoading.visibility = View.GONE
+                isLoading = false
+            }
+            return
+        }
+
         lifecycleScope.launch {
             try {
                 // First try to load existing chats
@@ -193,10 +223,25 @@ class ChatActivity : AppCompatActivity() {
                     Log.d(TAG, "Received ${chatItems.size} chats from backend")
                     allUsers.clear()
 
+                    // Cache chats for offline access
+                    val offlineManager = OfflineManager(this@ChatActivity)
+
                     chatItems.forEach { chat ->
                         // Skip if other user is current user (don't show self)
                         if (chat.otherUserId != currentUserId) {
                             Log.d(TAG, "Adding chat: ${chat.otherUsername} - ${chat.lastMessage} (online: ${chat.isOnline})")
+
+                            // Cache each chat (already in coroutine, no need for nested launch)
+                            offlineManager.cacheChat(
+                                id = chat.chatId,
+                                userId = currentUserId,
+                                otherUserId = chat.otherUserId,
+                                otherUsername = chat.otherUsername,
+                                otherProfilePic = chat.otherProfilePic,
+                                lastMessage = chat.lastMessage,
+                                lastTimestamp = chat.lastTimestamp
+                            )
+
                             allUsers.add(
                                 User(
                                     id = chat.otherUserId,

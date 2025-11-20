@@ -21,34 +21,54 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:maxWidth="280dp"
-        android:orientation="vertical"
+        android:orientation="horizontal"
         android:gravity="end">
 
+        <!-- Status indicator (exclamation mark for pending) -->
         <TextView
-            android:id="@+id/messageText"
+            android:id="@+id/statusIndicator"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/chat_bubble_bg"
-            android:padding="12dp"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp" />
+            android:text="!"
+            android:textColor="#FF6B6B"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_gravity="center_vertical"
+            android:layout_marginEnd="4dp"
+            android:visibility="gone"
+            android:padding="4dp"/>
 
         <LinearLayout
-            android:id="@+id/imagesContainer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="4dp"
-            android:visibility="gone"/>
+            android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/messageTimestamp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="12:34"
-            android:textSize="11sp"
-            android:textColor="#FFFFFF"
-            android:layout_marginTop="4dp"
-            android:visibility="gone"/>
+            <TextView
+                android:id="@+id/messageText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/chat_bubble_bg"
+                android:padding="12dp"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:id="@+id/imagesContainer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="4dp"
+                android:visibility="gone"/>
+
+            <TextView
+                android:id="@+id/messageTimestamp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="12:34"
+                android:textSize="11sp"
+                android:textColor="#FFFFFF"
+                android:layout_marginTop="4dp"
+                android:visibility="gone"/>
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

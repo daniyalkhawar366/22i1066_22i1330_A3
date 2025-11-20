@@ -6,7 +6,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
-import com.bumptech.glide.Glide
+import com.example.a22i1066_b_socially.offline.OfflineIntegrationHelper
 
 class PostImageAdapter(
     private val imageUrls: List<String>
@@ -24,10 +24,14 @@ class PostImageAdapter(
     }
 
     override fun onBindViewHolder(holder: ImageViewHolder, position: Int) {
-        Glide.with(holder.itemView.context)
-            .load(imageUrls[position])
-            .centerCrop()
-            .into(holder.imageView)
+        // Use offline image loading with proper placeholder
+        OfflineIntegrationHelper.loadImage(
+            holder.imageView,
+            imageUrls[position],
+            R.drawable.profile_pic, // Better placeholder
+            R.drawable.profile_pic, // Better error image
+            circular = false
+        )
 
         // Show image counter if multiple images
         if (imageUrls.size > 1) {

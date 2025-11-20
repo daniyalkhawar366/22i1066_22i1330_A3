@@ -28,6 +28,9 @@ import com.example.a22i1066_b_socially.network.RetrofitClient
 import com.example.a22i1066_b_socially.network.SendMessageRequest
 import com.example.a22i1066_b_socially.network.EditMessageRequest
 import com.example.a22i1066_b_socially.network.DeleteMessageRequest
+import com.example.a22i1066_b_socially.offline.OfflineManager
+import com.example.a22i1066_b_socially.offline.OfflineIntegrationHelper
+import com.example.a22i1066_b_socially.offline.NetworkMonitor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -76,6 +79,8 @@ class ChatDetailActivity : AppCompatActivity() {
     private var isUploadingImages = false
     private var isPolling = false
     private var isPollingIncomingCalls = false
+
+    private lateinit var networkMonitor: NetworkMonitor
 
 
     private val imagePickerLauncher = registerForActivityResult(
@@ -164,6 +169,21 @@ class ChatDetailActivity : AppCompatActivity() {
         loadMessages()
         startPolling()
         startIncomingCallPolling()
+
+        // Monitor network changes
+        networkMonitor = NetworkMonitor(this)
+        networkMonitor.isOnline.observe(this) { isOnline ->
+            if (isOnline) {
+                Log.d(TAG, "Network is back online - reloading messages")
+                // Trigger immediate sync and reload messages
+                com.example.a22i1066_b_socially.offline.SyncWorker.scheduleImmediateSync(this)
+                // Give sync a moment to complete, then reload
+                lifecycleScope.launch {
+                    delay(2000) // Wait 2 seconds for sync to process
+                    loadMessages(silent = true)
+                }
+            }
+        }
     }
 
     override fun onPause() {
@@ -171,6 +191,7 @@ class ChatDetailActivity : AppCompatActivity() {
         isPolling = false
         isPollingIncomingCalls = false
     }
+
 
     private fun startPolling() {
         isPolling = true
@@ -188,42 +209,143 @@ class ChatDetailActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val response = RetrofitClient.instance.getMessages(
-                    "Bearer $token",
-                    chatId,
-                    limit = 50
-                )
+                val offlineManager = OfflineManager(this@ChatDetailActivity)
+                val isOnline = OfflineIntegrationHelper.isOnline(this@ChatDetailActivity)
 
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val messageItems = response.body()?.messages ?: emptyList<com.example.a22i1066_b_socially.network.MessageItem>()
+                messages.clear()
 
-                    messages.clear()
-                    messageItems.forEach { msg: com.example.a22i1066_b_socially.network.MessageItem ->
-                        messages.add(
-                            Message(
-                                id = msg.id,
-                                text = msg.text,
-                                senderId = msg.senderId,
-                                timestamp = msg.timestamp,
-                                imageUrls = msg.imageUrls,
-                                type = msg.type
-                            )
+                if (isOnline) {
+                    // Online: Load from server and cache
+                    try {
+                        val response = RetrofitClient.instance.getMessages(
+                            "Bearer $token",
+                            chatId,
+                            limit = 50
                         )
-                    }
 
-                    runOnUiThread {
-                        adapter.notifyDataSetChanged()
-                        messageRecyclerView.scrollToPosition(messages.size - 1)
+                        if (response.isSuccessful && response.body()?.success == true) {
+                            val messageItems = response.body()?.messages ?: emptyList<com.example.a22i1066_b_socially.network.MessageItem>()
+
+                            val serverMessageIds = mutableSetOf<String>()
+                            val serverMessageContents = mutableSetOf<String>() // Track message text content
+
+                            messageItems.forEach { msg ->
+                                serverMessageIds.add(msg.id)
+                                serverMessageContents.add("${msg.senderId}_${msg.text}_${msg.timestamp / 1000}") // Use second precision
+
+                                // Cache each message
+                                offlineManager.cacheMessage(
+                                    id = msg.id,
+                                    chatId = chatId,
+                                    senderId = msg.senderId,
+                                    receiverId = if (msg.senderId == currentUserId) receiverUserId else currentUserId,
+                                    message = msg.text,
+                                    timestamp = msg.timestamp,
+                                    type = msg.type,
+                                    imageUrl = msg.imageUrls.firstOrNull(),
+                                    isSent = true
+                                )
+
+                                messages.add(
+                                    Message(
+                                        id = msg.id,
+                                        text = msg.text,
+                                        senderId = msg.senderId,
+                                        timestamp = msg.timestamp,
+                                        imageUrls = msg.imageUrls,
+                                        type = msg.type,
+                                        status = "sent"
+                                    )
+                                )
+                            }
+
+                            // Add any pending messages that are not on server yet
+                            val cachedMessages = offlineManager.getMessagesForChat(chatId)
+                            cachedMessages.forEach { cached ->
+                                val cachedContent = "${cached.senderId}_${cached.message}_${cached.timestamp / 1000}"
+
+                                // Only show if:
+                                // 1. Not sent yet (isSent = false)
+                                // 2. Not already on server (by ID)
+                                // 3. Not already on server (by content - to catch duplicates with different IDs)
+                                // 4. Is a pending_ ID (our format for offline messages)
+                                if (!cached.isSent &&
+                                    !serverMessageIds.contains(cached.id) &&
+                                    !serverMessageContents.contains(cachedContent) &&
+                                    cached.id.startsWith("pending_")) {
+
+                                    Log.d(TAG, "Adding pending message: ${cached.id} - ${cached.message}")
+                                    messages.add(
+                                        Message(
+                                            id = cached.id,
+                                            text = cached.message,
+                                            senderId = cached.senderId,
+                                            timestamp = cached.timestamp,
+                                            imageUrls = cached.imageUrl?.let { listOf(it) } ?: emptyList(),
+                                            type = cached.type,
+                                            status = "pending"
+                                        )
+                                    )
+                                } else if (!cached.isSent && serverMessageContents.contains(cachedContent)) {
+                                    // This pending message is now on server, clean it up
+                                    Log.d(TAG, "Cleaning up pending message that's now on server: ${cached.id}")
+                                    offlineManager.deleteMessageById(cached.id)
+                                }
+                            }
+                        } else if (!silent) {
+                            Toast.makeText(this@ChatDetailActivity, "Failed to load messages", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error loading from server, falling back to cache", e)
+                        // Fall back to cache on network error
+                        loadFromCache(offlineManager)
                     }
-                } else if (!silent) {
-                    Toast.makeText(this@ChatDetailActivity, "Failed to load messages", Toast.LENGTH_SHORT).show()
+                } else {
+                    // Offline: Load only from cache
+                    loadFromCache(offlineManager)
+                }
+
+                // Sort by timestamp
+                messages.sortBy { it.timestamp }
+
+                withContext(Dispatchers.Main) {
+                    // Use notifyDataSetChanged on main thread with proper synchronization
+                    try {
+                        adapter.notifyDataSetChanged()
+                        if (messages.isNotEmpty()) {
+                            messageRecyclerView.post {
+                                messageRecyclerView.scrollToPosition(messages.size - 1)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error updating RecyclerView", e)
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading messages", e)
                 if (!silent) {
-                    Toast.makeText(this@ChatDetailActivity, "Network error", Toast.LENGTH_SHORT).show()
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@ChatDetailActivity, "Error loading messages", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
+        }
+    }
+
+    private suspend fun loadFromCache(offlineManager: OfflineManager) {
+        val cachedMessages = offlineManager.getMessagesForChat(chatId)
+        cachedMessages.forEach { cached ->
+            messages.add(
+                Message(
+                    id = cached.id,
+                    text = cached.message,
+                    senderId = cached.senderId,
+                    timestamp = cached.timestamp,
+                    imageUrls = cached.imageUrl?.let { listOf(it) } ?: emptyList(),
+                    type = cached.type,
+                    status = if (cached.isSent) "sent" else "pending"
+                )
+            )
         }
     }
 
@@ -475,12 +597,83 @@ class ChatDetailActivity : AppCompatActivity() {
         if (text.isEmpty()) return
 
         val token = sessionManager.getToken() ?: return
+        val currentUserId = sessionManager.getUserId() ?: return
 
         sendButton.isEnabled = false
         Log.d(TAG, "Sending text message to: $receiverUserId")
 
         lifecycleScope.launch {
             try {
+                // Check if online
+                val isOnline = OfflineIntegrationHelper.isOnline(this@ChatDetailActivity)
+
+                if (!isOnline) {
+                    val currentTime = System.currentTimeMillis()
+
+                    // Check if this exact message already exists (prevent duplicates)
+                    val alreadyQueued = messages.any {
+                        it.status == "pending" && it.text == text && it.senderId == currentUserId
+                    }
+
+                    if (alreadyQueued) {
+                        Log.w(TAG, "Message already queued, skipping duplicate")
+                        messageInput.setText("")
+                        sendButton.isEnabled = true
+                        return@launch
+                    }
+
+                    // Queue message for offline sending
+                    val offlineManager = OfflineManager(this@ChatDetailActivity)
+                    val actionId = offlineManager.queueMessageForSending(
+                        chatId = chatId,
+                        receiverId = receiverUserId,
+                        message = text,
+                        type = "text"
+                    )
+
+                    if (actionId > 0) {
+                        // Get the cached message to show in UI
+                        val cachedMessages = offlineManager.getMessagesForChat(chatId)
+                        val newlyCachedMessage = cachedMessages.lastOrNull {
+                            !it.isSent && it.message == text
+                        }
+
+                        if (newlyCachedMessage != null) {
+                            // Add to UI immediately with pending status
+                            val newMessage = Message(
+                                id = newlyCachedMessage.id,
+                                text = newlyCachedMessage.message,
+                                senderId = currentUserId,
+                                timestamp = newlyCachedMessage.timestamp,
+                                imageUrls = emptyList(),
+                                type = "text",
+                                status = "pending"
+                            )
+
+                            val position = messages.size
+                            messages.add(newMessage)
+                            messageInput.setText("")
+
+                            // Update UI with specific item insertion
+                            runOnUiThread {
+                                adapter.notifyItemInserted(position)
+                                messageRecyclerView.scrollToPosition(messages.size - 1)
+                            }
+                        }
+
+                        // Don't show toast, just visual indicator
+                    } else {
+                        Toast.makeText(
+                            this@ChatDetailActivity,
+                            "Failed to queue message",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    sendButton.isEnabled = true
+                    return@launch
+                }
+
+                // Send online
                 val response = RetrofitClient.instance.sendMessage(
                     token = "Bearer $token",
                     request = SendMessageRequest(
@@ -493,7 +686,26 @@ class ChatDetailActivity : AppCompatActivity() {
                 if (response.isSuccessful && response.body()?.success == true) {
                     Log.d(TAG, "Text message sent successfully")
                     messageInput.setText("")
+
+                    // Cache the message for offline access
+                    val offlineManager = OfflineManager(this@ChatDetailActivity)
+                    response.body()?.message?.let { msg ->
+                        offlineManager.cacheMessage(
+                            id = msg.id,
+                            chatId = chatId,
+                            senderId = currentUserId,
+                            receiverId = receiverUserId,
+                            message = msg.text,
+                            timestamp = msg.timestamp,
+                            type = msg.type,
+                            isSent = true
+                        )
+                    }
+
                     loadMessages()
+
+                    // Trigger immediate sync to ensure any pending messages are sent
+                    com.example.a22i1066_b_socially.offline.SyncWorker.scheduleImmediateSync(this@ChatDetailActivity)
                 } else {
                     val errorMsg = response.body()?.error ?: "Unknown error"
                     Log.e(TAG, "Failed to send message: $errorMsg")
@@ -501,7 +713,52 @@ class ChatDetailActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error sending message", e)
-                Toast.makeText(this@ChatDetailActivity, "Network error: ${e.message}", Toast.LENGTH_SHORT).show()
+
+                // If network error, treat as offline
+                val tempMessageId = "pending_${System.currentTimeMillis()}_${(0..999).random()}"
+                val currentTime = System.currentTimeMillis()
+                val offlineManager = OfflineManager(this@ChatDetailActivity)
+
+                // Queue for sending
+                offlineManager.queueMessageForSending(
+                    chatId = chatId,
+                    receiverId = receiverUserId,
+                    message = text,
+                    type = "text"
+                )
+
+                // Cache as pending
+                offlineManager.cacheMessage(
+                    id = tempMessageId,
+                    chatId = chatId,
+                    senderId = currentUserId,
+                    receiverId = receiverUserId,
+                    message = text,
+                    timestamp = currentTime,
+                    type = "text",
+                    isSent = false
+                )
+
+                // Add to UI immediately
+                messages.add(
+                    Message(
+                        id = tempMessageId,
+                        text = text,
+                        senderId = currentUserId,
+                        timestamp = currentTime,
+                        imageUrls = emptyList(),
+                        type = "text",
+                        status = "pending"
+                    )
+                )
+
+                messageInput.setText("")
+
+                // Update UI
+                runOnUiThread {
+                    adapter.notifyDataSetChanged()
+                    messageRecyclerView.scrollToPosition(messages.size - 1)
+                }
             } finally {
                 sendButton.isEnabled = true
             }
@@ -653,6 +910,10 @@ class ChatDetailActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+
+        // Cleanup network monitor
+        networkMonitor.unregister()
+
         screenshotObserver?.let {
             try {
                 contentResolver.unregisterContentObserver(it)
